@@ -1,7 +1,6 @@
 # Defects the tests caught in this repository
 
-Five, all found by the harness rather than by reading the code, all recorded rather than smoothed
-over. They are the most useful thing in the project: a test suite that has never failed is a test
+Seven, all recorded rather than smoothed over. They are the most useful thing in the project: a test suite that has never failed is a test
 suite with no evidence behind it.
 
 Three of the four are cases where something **produced the correct output for the wrong reason**,
@@ -154,3 +153,98 @@ tooling was excluded.
 **Note for the freeze procedure.** When the corpus is eventually committed and tagged, the git object
 becomes the real anchor and this class of drift stops being possible. Until then the manifest is the
 only anchor there is, and it should be checked in CI rather than by hand — currently it is not.
+
+
+---
+
+## 6. A comment and a doc both asserted something false
+
+**Found by:** a targeted audit before the v0.1 hardening phase, not by a test — which is itself the
+point. Nothing in the suite could have caught it, because it was a claim *about* the code rather than
+a behaviour *of* it.
+
+`policy.ts` said of the argument-splice check:
+
+> With the table as it currently stands this branch CANNOT FIRE, and that is a proven property
+> rather than an accident.
+
+`PROVENANCE_AND_TAINT.md` repeated it under the heading *"It currently cannot fire, and that is proven
+rather than assumed"*.
+
+**It fires.** Running the shipped engine:
+
+```
+read_only_tool, sink_identity from {TOOL_OUTPUT, SYSTEM}
+  -> ALLOW   reasons: mixed_provenance, within_taint_ceiling
+```
+
+Tuning case `tool-t-002` is exactly this shape and has been producing that reason since it was
+written. `read_only_tool` has `effect: "none"` and admits `TOOL_DERIVED` in a sink, so the splice sits
+well inside its ceiling and is detected and reported.
+
+**What was actually true.** The invariant in `policy.test.ts` exempts `effect: "none"` rows —
+`if (row.effect === "none") continue;` — so it never constrained the row the splice fires on. The
+defensible claim is narrower and needed splitting in two:
+
+| claim | true? |
+|---|---|
+| the splice is detected and appears in `reasons` | **yes, today** |
+| the splice can turn ALLOW into NEEDS_REVIEW | **no** — the escalation is gated on `effect === "irreversible"`, and no acting capability admits a splice within its ceiling |
+
+So the check is **observable as a signal and inert as a gate**. The original wording collapsed those
+into one false sentence.
+
+**Why it belongs here rather than in a quiet fix.** A repository whose argument is that engines get
+graded on mechanism rather than outcome does not get to leave an unfalsifiable-sounding claim
+("proven property") in its own source when the property is not what was proven. The word *proven* was
+doing work it had not earned.
+
+**Fix.** Both the comment and the doc now state the two claims separately, and the doc carries a
+pointer back to this entry. A regression test in `taint.test.ts` pins that the splice reason is
+emitted, so the corrected claim is now checked rather than asserted.
+
+
+---
+
+## 7. `transaction_prepare` refuses a steering argument outright — recorded, not changed
+
+**Found by:** the playground's `--matrix` mode, added in v0.2. Reading a whole capability-by-provenance
+grid at once shows cells no corpus case happens to cover.
+
+```
+capability            SYSTEM   USER    RETRIEVED  WEB    ...
+transaction_prepare   allow    allow   DENY       DENY
+text_response         allow    allow   DENY       DENY
+```
+
+`transaction_prepare` is rated `effect: none, egress: none`. Its whole purpose is *build freely, gate
+the broadcast* — and it refuses a `sink_identity` argument sourced from anything untrusted, with no
+route out.
+
+**Why.** Two rules compose in a way neither anticipated:
+
+1. `ceilingFor` fails closed for unrated **steering** roles (`sink_identity`, `magnitude`, `control`),
+   tightening them to `USER_CONTROLLED`. That rule was added after `email_send.magnitude` was found
+   inheriting a permissive default — see defect #5's neighbourhood — and it applies to *every* row,
+   including no-effect ones.
+2. `transaction_prepare.liftableBy` is empty, so exceeding the ceiling yields `DENY` rather than
+   `NEEDS_DECLASSIFICATION`. A flat refusal with no route out.
+
+Corpus case `tok-h-002` uses the `selector` role and passes, which is why no test caught this. A
+realistic prepare would put the destination in `sink_identity`.
+
+**Why it is probably wrong.** Preparing an unsigned transaction changes nothing and sends nothing.
+Refusing to *build* the artifact a human is supposed to inspect defeats the prepare/broadcast split
+this project argues for, and pushes an integrator back toward one combined call — which is the
+outcome the split exists to prevent.
+
+**Why it was not changed.** The fix is to rate `transaction_prepare`'s steering roles explicitly as
+`UNTRUSTED_EXTERNAL`, or to exempt no-effect rows from the fail-closed fallback. Both loosen a
+ceiling. This was found during an expansion pass carrying an explicit instruction not to weaken the
+policy, and no measured number depends on it — so it is recorded as an open question rather than
+quietly fixed while nobody was looking at the diff. Changing a ceiling is a decision, not a cleanup.
+
+**The general lesson**, which is the reason this entry exists at all: the two rules are individually
+correct and compose into a behaviour neither author intended. A per-row invariant cannot see that —
+`policy.test.ts` passes, because `sink_identity ≤ USER_CONTROLLED` satisfies the "closed to untrusted"
+branch. It took reading the whole grid.

@@ -26,7 +26,46 @@ catches every overt attack here.
 | **silent attacks blocked** (no injection wording) | **6/6** | **0/6** |
 | **benign quoted-attack cases over-blocked** | **0/6** | **3/6** |
 
-Tuning corpus, 8 cases: containment 4/4 attacks and 4/4 benign; classifier 1/4 and 4/4.
+### Across all four splits
+
+The corpus is 51 cases in four splits, reported side by side and **never pooled** — they are not
+samples from one population, and one headline number over all four would claim more than any of them
+supports.
+
+```
+  CONTAINMENT                                    CLASSIFIER BASELINE
+  split         n    blocked  allowed            blocked  allowed   FN   FP
+  holdout       15   9/9      6/6                3/9      3/6       6    3
+  holdout_v2     6   4/4      2/2                0/4      2/2       4    0
+  tuning        19   10/10    9/9                1/10     9/9       9    0
+  derived        6   4/4      2/2                0/4      2/2       4    0
+
+  adaptive       8   6/6      2/2                0/6      2/2       6    0
+
+  SILENT ATTACKS - no injection wording for any detector to find
+                31   31/31                       0/31
+
+  UTILITY - what survives the policy
+    over-blocked   0/23 benign cases refused
+    under-blocked  0/35 attacks allowed
+```
+
+The utility row is the only one that distinguishes a containment policy from a switch marked OFF.
+Every safety figure above has a degenerate optimum — mutant `M5 paranoid` refuses everything and
+scores 100% on attacks in every split. The benign column is what tells them apart.
+
+| split | what it is worth |
+|---|---|
+| `holdout` (16) | frozen **before the engine existed**. The only split with an ordering property |
+| `holdout_v2` (6) | frozen, authored *after* the engine. Closes v0's laundering gap. **Not a blind instrument** |
+| `tuning` (23) | freely editable. Agreement here is close to tautological |
+| `derived` (6) | attack shapes designed by **other people** — least circular evidence here, and smallest |
+| `adaptive` (8) | evasions that follow from knowing the design: extra hops, field extraction, a "safe display label", a valid signature spent outside its purpose, a valid receipt spent outside its slot. **Not a real adaptive attacker** |
+
+Read the containment column with its caveat: a flat line across splits is partly a *prediction of the
+architecture*, since the policy never reads the text. The columns that carry real information about
+containment are the benign one — over-blocking is the failure it can actually have — and `derived`,
+where the shapes were not designed by the author.
 
 Two rows carry the argument.
 
@@ -232,15 +271,44 @@ attacker. No end-to-end task utility measurement - CaMeL's honest "77 vs 84" has
 The freeze is **not yet cashed**: `FREEZE.json` records `frozenAtCommit: null` because the repo is
 uncommitted, so "the holdout predates the engine" is currently a claim rather than a `git` fact.
 
+## Integration
+
+**Use the guard, not the raw engine.**
+
+```ts
+import { createGuard } from "@agent-containment/ledger";
+const guard = createGuard({ clock: () => Date.now() });
+const verdict = guard.decide({ action, sources, receipts });
+```
+
+`decide()` takes `now` and `spentReceipts` as *optional* arguments — omit them and you silently get no
+expiry checking and unlimited receipt reuse. The core cannot fix that without holding state, which
+would cost the purity the design rests on. So the guard's input type declares both as `never`:
+forgetting them is a **compile error** rather than a silent downgrade. See
+[docs/INTEGRATION.md](docs/INTEGRATION.md).
+
 ## Install and run
 
 ```bash
 pnpm install
-pnpm lint && pnpm typecheck && pnpm build && pnpm test
+pnpm verify:corpus && pnpm lint && pnpm typecheck && pnpm build && pnpm test
+```
+
+Six runnable examples:
+
+```bash
+npx tsx examples/playground.ts --matrix --role sink_identity   # the whole policy as a grid
+npx tsx examples/playground.ts --capability payment --role sink_identity   --provenance TOOL_OUTPUT --derived-from WEB --content "anything you like"
+npx tsx examples/rag-pipeline.ts         # retrieval end to end, six behaviours
+npx tsx examples/wallet-assistant.ts     # one token's metadata, four capabilities, four answers
 npx tsx examples/web-research-agent.ts   # the silent exfiltration
 npx tsx examples/email-assistant.ts      # same capability, opposite answers
 npx tsx examples/rag-assistant.ts        # answer from a poisoned chunk, refuse to act on it
 ```
+
+**Start with the playground.** Rewrite `--content` to anything and watch the decision not move. That
+takes about fifteen seconds and carries more than this README does, because you perform the
+experiment rather than being told the result.
 
 ## Docs
 
@@ -251,7 +319,10 @@ npx tsx examples/rag-assistant.ts        # answer from a poisoned chunk, refuse 
 - [RIGHT_ANSWER_WRONG_REASON.md](docs/RIGHT_ANSWER_WRONG_REASON.md) - grading mechanism, not verdict
 - [EVALS.md](docs/EVALS.md) - classifier vs containment numbers, mutants, freeze procedure
 - [LIMITATIONS.md](docs/LIMITATIONS.md) - the laundering gap and every declassification weakness
-- [DEFECTS_FOUND.md](docs/DEFECTS_FOUND.md) - the four defects above, in full
+- [DEFECTS_FOUND.md](docs/DEFECTS_FOUND.md) - seven defects the tests and the playground found here
+- [RETRIEVAL.md](docs/RETRIEVAL.md) - why retrieval is the canonical injection path
+- [DERIVED_CORPUS.md](docs/DERIVED_CORPUS.md) - what the derived split proves, and does not
+- [PLAYGROUND_PLAN.md](docs/PLAYGROUND_PLAN.md) - the CLI, and the browser version that is not built
 - [FUTURE_MODEL_LAYER.md](docs/FUTURE_MODEL_LAYER.md) - a plan, explicitly not implemented
 - [RESUME_BULLETS.md](docs/RESUME_BULLETS.md) - portfolio phrasing, and what not to claim
 - [../STATUS.md](STATUS.md) - v0 inventory, commands, pass/fail/skipped table

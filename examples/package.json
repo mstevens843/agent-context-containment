@@ -9,7 +9,11 @@
   "scripts": {
     "web": "tsx web-research-agent.ts",
     "email": "tsx email-assistant.ts",
-    "rag": "tsx rag-assistant.ts"
+    "rag": "tsx rag-assistant.ts",
+    "wallet": "tsx wallet-assistant.ts",
+    "rag:pipeline": "tsx rag-pipeline.ts",
+    "playground": "tsx playground.ts",
+    "wallet:tuple": "tsx wallet-tuple.ts"
   },
   "dependencies": {
     "@agent-containment/classifier": "workspace:*",

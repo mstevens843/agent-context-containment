@@ -58,7 +58,22 @@ export type DeclassificationRule =
   /** The value is an element selected out of a collection we already held cleanly. */
   | "clean_selection"
   /** The value is byte-identical to something we already held cleanly. */
-  | "echo_of_clean";
+  | "echo_of_clean"
+  /**
+   * Something holding a key vouched for this exact value, for this exact slot.
+   *
+   * Admissible only on capabilities with no effect and no full egress - a signature attests origin,
+   * not content safety, so it can feed a read but must never steer a send.
+   */
+  | "attested_tool_output"
+  /**
+   * A human ratified a COMBINATION of values together, as one decision.
+   *
+   * Distinct from `user_confirmed_value` and not reducible to several of them: confirming a
+   * recipient and separately confirming an amount is two decisions about two values, and neither
+   * asked the question the pair poses.
+   */
+  | "tuple_confirmed";
 
 /** Every rule, for iteration and exhaustiveness checks in tests. */
 export const ALL_DECLASSIFICATION_RULES: readonly DeclassificationRule[] = [
@@ -67,6 +82,8 @@ export const ALL_DECLASSIFICATION_RULES: readonly DeclassificationRule[] = [
   "numeric_envelope",
   "clean_selection",
   "echo_of_clean",
+  "attested_tool_output",
+  "tuple_confirmed",
 ] as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -75,6 +92,24 @@ export const ALL_DECLASSIFICATION_RULES: readonly DeclassificationRule[] = [
 
 /** A per-role ceiling. Absent roles fall back to the row's `defaultCeiling`. */
 export type RoleCeilings = Partial<Readonly<Record<ParamRole, Taint>>>;
+
+/**
+ * One combination that has to be approved as a unit.
+ *
+ * Declarative and per capability, rather than a condition buried in the engine. The engine reads
+ * this list and knows nothing about what a payment or an email is - which is the same anti-drift
+ * argument as `CAPABILITY_POLICY` itself: a reviewer who reads no TypeScript can still see which
+ * combinations the policy treats as one decision, and a change to that set is a visible line in a
+ * diff rather than a branch somebody has to find.
+ */
+export interface TuplePolicy {
+  /** Stable name, so a refusal can say which combination was not reviewed. */
+  readonly id: string;
+  /** The roles that form the combination. Two or more; one role is not a tuple. */
+  readonly roles: readonly ParamRole[];
+  /** Why these belong together. Quoted into the refusal. */
+  readonly why: string;
+}
 
 export interface CapabilityRow {
   /**
@@ -92,10 +127,40 @@ export interface CapabilityRow {
   /** Required regardless of taint. A property of the EFFECT axis, not the taint axis. */
   readonly requiresConfirmation: boolean;
   /**
+   * This capability produces a DRAFT for a human to inspect, not an effect on the world.
+   *
+   * Changes one thing: an argument that exceeds its ceiling escalates to `NEEDS_REVIEW` instead of
+   * being refused. Building the artifact is how the human gets something to look at, so refusing to
+   * build it removes the review step rather than protecting anything.
+   *
+   * DELIBERATELY NARROW, and enforced rather than trusted. `policy.test.ts` and `prepare.test.ts`
+   * both assert that a draft capability has `effect: "none"` AND `egress: "none"` AND does not
+   * require confirmation, so this flag is unsettable on anything that acts. Without that invariant
+   * it would be one careless edit away from being a general downgrade of every steering ceiling,
+   * which is exactly what the fail-closed rule exists to prevent.
+   *
+   * The draft still carries its taint. Preparation does not launder: the artifact inherits the join
+   * of its inputs and the broadcast sees it, or the two rows compose into a laundering pipeline.
+   */
+  readonly draftOnly?: boolean;
+  /**
    * Any ONE of these admits a value above the ceiling. EMPTY MEANS THE CEILING IS ABSOLUTE, and the
    * engine must answer DENY rather than NEEDS_DECLASSIFICATION - see the livelock note in `decide`.
    */
   readonly liftableBy: ReadonlySet<DeclassificationRule>;
+  /**
+   * Combinations that must be reviewed TOGETHER when their members were admitted separately.
+   *
+   * Receipts are per value, and two individually-admissible values can be an attack as a pair: a
+   * recipient from a valid allowlist plus an amount inside a valid envelope is a correctly-formed
+   * transfer to the wrong person. Each receipt answers a question nobody asked about the other.
+   *
+   * DELIBERATELY NARROW. The check fires only when two or more of these roles were DECLASSIFIED
+   * separately - not merely present. Values already within their ceilings raise no tuple question,
+   * because nothing had to be admitted. That scoping is what stops this from becoming a rules engine
+   * that fires on every call and gets switched off.
+   */
+  readonly tuplePolicies?: readonly TuplePolicy[];
   /** Quoted verbatim into refusals, so a denial carries the argument and not just a code. */
   readonly approvalBoundary: string;
 }
@@ -146,7 +211,23 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "UNTRUSTED_EXTERNAL",
     roleCeilings: { sink_identity: "TOOL_DERIVED", control: "TOOL_DERIVED" },
     requiresConfirmation: false,
-    liftableBy: lift("allowlist_member", "clean_selection"),
+    tuplePolicies: [
+      {
+        // `control`, not `selector`. A selector on this row sits at the top of the lattice and is
+        // therefore never declassified, so a combination naming it could never fire - which an
+        // invariant in tuple.test.ts caught the moment it was written. A dead policy looks like
+        // coverage and is none.
+        id: "target_and_control",
+        roles: ["sink_identity", "control"],
+        why: "which system is queried and how - the pair decides what leaves in the arguments",
+      },
+    ],
+    liftableBy: lift(
+      "allowlist_member",
+      "clean_selection",
+      "attested_tool_output",
+      "tuple_confirmed",
+    ),
     approvalBoundary: "Reads and returns. Changes nothing, but its arguments still leave a trace.",
   },
 
@@ -164,6 +245,10 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "UNTRUSTED_EXTERNAL",
     roleCeilings: {},
     requiresConfirmation: false,
+    // The fix for defect #7. Steering roles still fail closed to USER_CONTROLLED - the ceiling is
+    // NOT loosened - but exceeding it now escalates rather than refusing, because the thing being
+    // refused was the construction of the draft a human was meant to review.
+    draftOnly: true,
     liftableBy: lift(),
     approvalBoundary:
       "Builds an unsigned transaction for a human to inspect. Does not sign, submit, or grant " +
@@ -200,7 +285,19 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "UNTRUSTED_EXTERNAL",
     roleCeilings: { sink_identity: "USER_CONTROLLED", control: "USER_CONTROLLED" },
     requiresConfirmation: false,
-    liftableBy: lift("user_confirmed_value", "allowlist_member", "echo_of_clean"),
+    tuplePolicies: [
+      {
+        id: "path_and_mode",
+        roles: ["sink_identity", "control"],
+        why: "where it lands and whether it truncates - append and overwrite are different acts",
+      },
+    ],
+    liftableBy: lift(
+      "user_confirmed_value",
+      "allowlist_member",
+      "echo_of_clean",
+      "tuple_confirmed",
+    ),
     approvalBoundary: "Writes a file. The path decides what is overwritten.",
   },
 
@@ -225,7 +322,23 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
       control: "USER_CONTROLLED",
     },
     requiresConfirmation: false,
-    liftableBy: lift("user_confirmed_value", "allowlist_member", "echo_of_clean"),
+    // Recipient and control flags, NOT recipient and body. See the note in DECLASSIFICATION.md: a
+    // body sits at UNTRUSTED_EXTERNAL and is therefore never declassified, so a (sink_identity,
+    // payload) tuple could never fire. Declaring a policy that cannot trigger would look like
+    // coverage and be none - the same shape as the v0 laundering case that aimed and missed.
+    tuplePolicies: [
+      {
+        id: "recipient_and_control",
+        roles: ["sink_identity", "control"],
+        why: "who receives it and how it is sent - reply-all to an untrusted address is the pair",
+      },
+    ],
+    liftableBy: lift(
+      "user_confirmed_value",
+      "allowlist_member",
+      "echo_of_clean",
+      "tuple_confirmed",
+    ),
     approvalBoundary: "Sends mail. Unsend is a client-side illusion; treat it as irreversible.",
   },
 
@@ -240,7 +353,19 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "TOOL_DERIVED",
     roleCeilings: { sink_identity: "USER_CONTROLLED", magnitude: "USER_CONTROLLED" },
     requiresConfirmation: true,
-    liftableBy: lift("user_confirmed_value", "allowlist_member", "numeric_envelope"),
+    tuplePolicies: [
+      {
+        id: "recipient_and_amount",
+        roles: ["sink_identity", "magnitude"],
+        why: "a valid payee and a valid amount are a correctly-formed transfer to the wrong person",
+      },
+    ],
+    liftableBy: lift(
+      "user_confirmed_value",
+      "allowlist_member",
+      "numeric_envelope",
+      "tuple_confirmed",
+    ),
     approvalBoundary: "Moves money. There is no undo.",
   },
 
@@ -259,6 +384,13 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "USER_CONTROLLED",
     roleCeilings: { sink_identity: "CLEAN", control: "CLEAN" },
     requiresConfirmation: true,
+    tuplePolicies: [
+      {
+        id: "target_and_setting",
+        roles: ["sink_identity", "control"],
+        why: "which account and which setting - a recovery address is the confused-deputy pair",
+      },
+    ],
     liftableBy: lift(),
     approvalBoundary: "Changes keys, recovery, or permissions - including the ones guarding this.",
   },
@@ -273,7 +405,19 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "USER_CONTROLLED",
     roleCeilings: { sink_identity: "CLEAN", magnitude: "CLEAN", control: "CLEAN" },
     requiresConfirmation: true,
-    liftableBy: lift("user_confirmed_value"),
+    tuplePolicies: [
+      {
+        id: "recipient_and_amount",
+        roles: ["sink_identity", "magnitude"],
+        why: "the destination and the value moved are one decision, not two",
+      },
+      {
+        id: "recipient_and_asset",
+        roles: ["sink_identity", "selector"],
+        why: "which asset goes where - the right amount of the wrong token is still a loss",
+      },
+    ],
+    liftableBy: lift("user_confirmed_value", "tuple_confirmed"),
     approvalBoundary: "Submits a signed transaction. Once it lands it cannot be recalled.",
   },
 
@@ -337,7 +481,7 @@ export const ceilingFor = (row: CapabilityRow, role: ParamRole): Taint => {
 // Input to the engine
 // ---------------------------------------------------------------------------------------------
 
-/** A receipt as the engine sees it. Issuing and validating one lives in declassify.ts. */
+/** A receipt as the engine sees it. Issuing one lives in declassify.ts. */
 export interface ReceiptEvidence {
   readonly id: ReceiptId;
   readonly rule: DeclassificationRule;
@@ -347,6 +491,15 @@ export interface ReceiptEvidence {
   readonly argName: string;
   /** The highest taint this receipt admits. */
   readonly lifts: Taint;
+  /** The value it admits. Checked against the argument's value when the caller supplies one. */
+  readonly admitted?: unknown;
+  /** When it is good for, and which source it is bound to. */
+  readonly scope?: {
+    readonly nonce: string;
+    readonly issuedAt: number;
+    readonly expiresAt: number | null;
+    readonly source: SourceId | null;
+  };
 }
 
 export interface DecisionInput {
@@ -356,6 +509,21 @@ export interface DecisionInput {
   readonly receipts?: readonly ReceiptEvidence[];
   /** True when a human has confirmed this action. The shell owns the prompt; the engine does not. */
   readonly confirmed?: boolean;
+  /**
+   * Receipts already spent, supplied by the shell's ledger.
+   *
+   * The engine holds no state between calls, so single-use cannot be enforced inside it. Threading
+   * the ledger through the call signature is what makes forgetting it visible: a caller who passes
+   * nothing gets unlimited reuse, and that is a documented limitation rather than a silent one.
+   */
+  readonly spentReceipts?: ReadonlySet<ReceiptId>;
+  /**
+   * The current time, from the caller. The engine reads no clock.
+   *
+   * Omitting it disables expiry checking entirely rather than defaulting to "now", because a default
+   * clock in a pure function is a lie that only shows up when two runs of the same input disagree.
+   */
+  readonly now?: number;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -397,6 +565,116 @@ function resolveTaint(
   }
   return { taint, provenance };
 }
+
+/**
+ * Find the receipt that covers this argument, and say why the others did not.
+ *
+ * Checks run in a deliberate order: REPLAY FIRST, because it is the only rejection whose reason is
+ * evidence of an adversary rather than of a bug, and a receipt can fail several checks at once while
+ * the log keeps whichever fired first. Check capability first and a replayed receipt that also has
+ * the wrong capability is logged as a mismatch, and the attack signal is gone.
+ */
+function coverFor(
+  a: ArgAssessment,
+  input: DecisionInput,
+  row: CapabilityRow,
+  capability: Capability,
+): { readonly covering: ReceiptEvidence | undefined; readonly rejections: readonly Reason[] } {
+  const rejections: Reason[] = [];
+  const spent = input.spentReceipts;
+  const now = input.now;
+
+  for (const r of input.receipts ?? []) {
+    // Not for this slot at all. Silent: a receipt for another argument is ordinary, not suspicious.
+    if (r.argName !== a.arg.name) continue;
+
+    if (spent?.has(r.id)) {
+      rejections.push(
+        reason("receipt_already_consumed", `receipt ${r.id} for "${a.arg.name}" has been spent`),
+      );
+      continue;
+    }
+    if (now !== undefined && r.scope?.expiresAt != null && now > r.scope.expiresAt) {
+      rejections.push(
+        reason(
+          "receipt_expired",
+          `receipt ${r.id} for "${a.arg.name}" expired at ${r.scope.expiresAt}`,
+        ),
+      );
+      continue;
+    }
+    if (r.capability !== capability || r.role !== a.arg.role) {
+      rejections.push(
+        reason(
+          "receipt_capability_mismatch",
+          `receipt ${r.id} was issued for ${r.capability}/${r.role}, not ${capability}/${a.arg.role}`,
+        ),
+      );
+      continue;
+    }
+    // Value binding. Only checkable when the caller supplied the argument's value - and when it did,
+    // this is what closes the check-versus-use gap: the receipt must admit THIS value, not a value.
+    if (
+      a.arg.value !== undefined &&
+      r.admitted !== undefined &&
+      String(r.admitted) !== a.arg.value
+    ) {
+      rejections.push(
+        reason(
+          "receipt_value_mismatch",
+          `receipt ${r.id} admits ${JSON.stringify(String(r.admitted))}, not ` +
+            `${JSON.stringify(a.arg.value)}`,
+        ),
+      );
+      continue;
+    }
+    // Source binding. Two emails can name the same address; only one of them was confirmed.
+    if (r.scope?.source != null && !a.arg.derivedFrom.includes(r.scope.source)) {
+      rejections.push(
+        reason(
+          "receipt_source_mismatch",
+          `receipt ${r.id} is bound to source ${r.scope.source}, which did not feed "${a.arg.name}"`,
+        ),
+      );
+      continue;
+    }
+    if (!taintAtMost(a.taint, r.lifts)) {
+      rejections.push(
+        reason("taint_exceeds_ceiling", `receipt ${r.id} lifts only to ${r.lifts}, not ${a.taint}`),
+      );
+      continue;
+    }
+    if (!row.liftableBy.has(r.rule)) {
+      rejections.push(
+        reason("receipt_capability_mismatch", `${capability} does not admit the ${r.rule} rule`),
+      );
+      continue;
+    }
+    return { covering: r, rejections };
+  }
+  return { covering: undefined, rejections };
+}
+
+/**
+ * Canonical name and value for a tuple, so a tuple receipt binds to an exact combination.
+ *
+ * Sorted by argument name, so the same pair in a different argument order produces the same key -
+ * and a DIFFERENT pair produces a different one. That is what stops a receipt for one combination
+ * admitting a reordered or substituted one.
+ */
+const tupleKey = (assessments: readonly ArgAssessment[], roles: readonly ParamRole[]): string =>
+  assessments
+    .filter((a) => roles.includes(a.arg.role))
+    .map((a) => a.arg.name)
+    .sort()
+    .join("+");
+
+const tupleValue = (assessments: readonly ArgAssessment[], roles: readonly ParamRole[]): string =>
+  assessments
+    .filter((a) => roles.includes(a.arg.role))
+    .map((a) => `${a.arg.name}=${a.arg.value ?? ""}`)
+    .sort()
+    .join("&");
 
 /** Everything the engine learned about one argument. */
 interface ArgAssessment {
@@ -453,6 +731,7 @@ export function decide(
         ),
       ],
       effects: [{ type: "LOG_DECISION" }],
+      spends: [],
     };
   }
 
@@ -478,25 +757,28 @@ export function decide(
 
   // ---- the taint gate, per argument -------------------------------------------------------------
   const reasons: Reason[] = [];
+  /** Arguments that needed a receipt and got one. The tuple gate keys off this, not off presence. */
+  const admittedByReceipt = new Set<string>();
+  /** Receipts this decision actually used. The shell must mark these spent, atomically with acting. */
+  const spent: ReceiptId[] = [];
   const overCeiling = assessments.filter((a) => !taintAtMost(a.taint, a.ceiling));
 
   if (overCeiling.length > 0) {
     const unlifted: ArgAssessment[] = [];
     for (const a of overCeiling) {
-      const covering = (input.receipts ?? []).find(
-        (r) =>
-          r.capability === action.capability &&
-          r.role === a.arg.role &&
-          r.argName === a.arg.name &&
-          taintAtMost(a.taint, r.lifts) &&
-          row.liftableBy.has(r.rule),
-      );
+      // Every reason a receipt might fail to cover this argument, reported rather than silently
+      // skipped. A receipt that was rejected for replay looks identical, from the outside, to no
+      // receipt at all - and those are very different events. The first is an adversary.
+      const { covering, rejections } = coverFor(a, input, row, action.capability);
+      for (const rj of rejections) reasons.push(rj);
       if (covering !== undefined) {
         reasons.push(
           reason("declassified", `"${a.arg.name}" admitted by ${covering.rule}`, {
             value: undefined,
           }),
         );
+        spent.push(covering.id);
+        admittedByReceipt.add(a.arg.name);
         continue;
       }
       unlifted.push(a);
@@ -530,6 +812,33 @@ export function decide(
         }
       }
 
+      // A draft escalates instead of refusing. Placed BEFORE the deny/declassify split because for a
+      // capability that produces no effect, neither of those answers is right: a flat DENY removes
+      // the artifact the human was going to review, and asking for a declassification demands a
+      // receipt before there is anything concrete to show them. Building it and routing it to a
+      // person is the whole point of having a prepare step.
+      if (row.draftOnly === true) {
+        reasons.push(
+          reason(
+            "draft_requires_review",
+            `${action.capability} produces a draft, not an effect, so it is built and escalated ` +
+              `rather than refused. ${row.approvalBoundary}`,
+          ),
+        );
+        return {
+          decision: "NEEDS_REVIEW",
+          capability: action.capability,
+          taint: overall,
+          provenance: allProvenance,
+          reasons,
+          effects: [
+            { type: "LOG_DECISION" },
+            { type: "ESCALATE", summary: `${action.tool}: draft steered by untrusted input` },
+          ],
+          spends: [],
+        };
+      }
+
       // Unliftable row: DENY, not NEEDS_DECLASSIFICATION. See the livelock note above.
       if (row.liftableBy.size === 0) {
         return {
@@ -539,6 +848,7 @@ export function decide(
           provenance: allProvenance,
           reasons,
           effects: [{ type: "LOG_DECISION" }],
+          spends: [],
         };
       }
 
@@ -555,6 +865,7 @@ export function decide(
         provenance: allProvenance,
         reasons,
         effects: [{ type: "LOG_DECISION" }],
+        spends: [],
       };
     }
   }
@@ -579,12 +890,21 @@ export function decide(
   // way this rule over-blocks. What matters is a splice in an argument that decides WHERE the action
   // goes or HOW MUCH it moves.
   //
-  // With the table as it currently stands this branch CANNOT FIRE, and that is a proven property
-  // rather than an accident: `policy.test.ts` asserts that every steering role on a capability with
-  // a real effect sits at or below USER_CONTROLLED, so any splice that would reach here has already
-  // exceeded its ceiling and been refused. The check stays because it is the guard for a band that
-  // is currently empty - loosen a steering ceiling and it activates on its own, and the invariant
-  // test fails at the same time to say so. Deleting it would make a future loosening silent.
+  // WHAT THIS BRANCH DOES AND DOES NOT DO, stated correctly. An earlier version of this comment
+  // claimed the branch "cannot fire, and that is a proven property". That was wrong, and the
+  // correction matters in a repository whose whole argument is honest reporting.
+  //
+  // It fires. A `read_only_tool` call whose `sink_identity` is assembled from a TOOL_OUTPUT source
+  // and a SYSTEM source produces `reasons: [mixed_provenance, within_taint_ceiling]` - the splice is
+  // detected and reported. What it cannot currently do is change the DECISION, because the
+  // escalation below is gated on `row.effect === "irreversible"`, and `policy.test.ts` asserts that
+  // every steering role on a capability with a real effect sits at or below USER_CONTROLLED. So any
+  // splice that would reach the escalation has already exceeded its ceiling and been refused above.
+  //
+  // The distinction is worth keeping straight: the splice is OBSERVABLE in the audit trail today,
+  // and it is INERT as a gate today. Loosen a steering ceiling on an acting capability and the gate
+  // activates on its own while the invariant test fails at the same moment to say the band opened.
+  // Deleting the check would make that future loosening silent.
   const mixed = assessments.some((a) => {
     if (!STEERING_ROLES.has(a.arg.role)) return false;
     const classes = new Set<Taint>([...a.provenance].map(taintOf));
@@ -597,6 +917,52 @@ export function decide(
         "an argument that steers this action was assembled from more than one trust class",
       ),
     );
+  }
+
+  // ---- the tuple gate ------------------------------------------------------------------------
+  // Runs AFTER every argument has been individually cleared and BEFORE the confirmation gate,
+  // because it is a question about a combination that only exists once the parts are admissible.
+  //
+  // Fires only on roles that were DECLASSIFIED separately. An action whose arguments were all within
+  // their ceilings never reaches here, which is what keeps this from firing on ordinary traffic.
+  for (const policy of row.tuplePolicies ?? []) {
+    const separatelyAdmitted = assessments.filter(
+      (a) => policy.roles.includes(a.arg.role) && admittedByReceipt.has(a.arg.name),
+    );
+    // DISTINCT roles, not merely two arguments. A "recipient and amount" policy means one of each;
+    // two separately-admitted recipients are two instances of the same question, not the combination
+    // the policy is about. The first version counted arguments and therefore fired on any two
+    // same-role admissions - which a mutant surfaced by being rescued from its own defect.
+    const rolesCovered = new Set(separatelyAdmitted.map((a) => a.arg.role));
+    if (rolesCovered.size > 1) {
+      const covered = (input.receipts ?? []).some(
+        (r) =>
+          r.rule === "tuple_confirmed" &&
+          r.argName === tupleKey(assessments, policy.roles) &&
+          (r.admitted === undefined || r.admitted === tupleValue(assessments, policy.roles)),
+      );
+      if (!covered) {
+        reasons.push(
+          reason(
+            "tuple_requires_review",
+            `${separatelyAdmitted.map((a) => `"${a.arg.name}"`).join(" and ")} were admitted separately. Each receipt answers a question nobody asked about the other, and the pair is one decision. ${row.approvalBoundary}`,
+          ),
+        );
+        return {
+          decision: "NEEDS_REVIEW",
+          capability: action.capability,
+          taint: overall,
+          provenance: allProvenance,
+          reasons,
+          effects: [
+            { type: "LOG_DECISION" },
+            { type: "ESCALATE", summary: `${action.tool}: combination not reviewed together` },
+          ],
+          spends: [],
+        };
+      }
+      reasons.push(reason("tuple_confirmed", `"${policy.id}" was ratified as one decision`));
+    }
   }
 
   // ---- the confirmation gate ------------------------------------------------------------------------
@@ -617,6 +983,7 @@ export function decide(
         { type: "LOG_DECISION" },
         { type: "ESCALATE", summary: `${action.tool}: ${row.approvalBoundary}` },
       ],
+      spends: [],
     };
   }
 
@@ -634,6 +1001,8 @@ export function decide(
     provenance: allProvenance,
     reasons,
     effects,
+    // Only an ALLOW spends. See the note on Verdict.spends.
+    spends: spent,
   };
 }
 

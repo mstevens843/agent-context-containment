@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "caseCount": 6,
+  "frozenAt": "2026-08-25",
+  "frozenAtCommit": null,
+  "closes": "The laundering gap recorded in v0: mutant M4 model_launders was bitten by no holdout case, because v0's tool-h-002 aimed at the defect and did not discriminate.",
+  "relationshipToV1": "ADDITIVE. corpus/holdout/ is unchanged and its results are reported separately. v2 does not supersede v1 and its numbers are never pooled with v1's.",
+  "rationale": "Authored against the same schema as v1. Every case sits on the read_only_tool sink boundary, which is where the derivedFrom edge changes the answer - the boundary v1 never tested.",
+  "verify": "git cat-file -e <frozenAtCommit>:packages/core/src/policy.ts   # NOT applicable: v2 was authored after the engine existed. See the honesty note below.",
+  "honesty": "v2 does NOT carry v1's ordering property. v1 was written before packages/core/src/policy.ts existed; v2 was written after, by someone who had read the engine. It is a regression split with a frozen manifest, not a blind instrument, and it should not be described as one."
+}

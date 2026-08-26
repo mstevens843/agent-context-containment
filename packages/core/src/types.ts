@@ -271,14 +271,30 @@ export type ReasonCode =
   | "irreversible_effect"
   /** Policy requires a human confirmation for this capability and none was supplied. */
   | "confirmation_required"
+  /**
+   * A draft capability was steered by input above its ceiling, so it is built and escalated.
+   *
+   * Distinct from `confirmation_required`, which is about an IRREVERSIBLE action needing a human
+   * regardless of taint. This one is about a HARMLESS action whose inputs were untrusted: the draft
+   * is produced precisely so a person has something concrete to look at.
+   */
+  | "draft_requires_review"
+  /** Two or more values were admitted separately and their combination was never reviewed. */
+  | "tuple_requires_review"
+  /** The combination was ratified as one decision. */
+  | "tuple_confirmed"
   /** A confirmation was supplied but does not bind to the exact value being used. */
   | "confirmation_value_mismatch"
-  /** A declassification receipt exists but was issued for a different capability. */
+  /** A declassification receipt exists but was issued for a different capability or role. */
   | "receipt_capability_mismatch"
-  /** A declassification receipt exists but was issued for a different value. */
+  /** A receipt exists for this slot and admits a different value than the one being used. */
   | "receipt_value_mismatch"
-  /** The receipt has been used already and this rule issues single-use receipts. */
+  /** The receipt has already been spent. Replay. */
   | "receipt_already_consumed"
+  /** The receipt was issued for a value from a different source. */
+  | "receipt_source_mismatch"
+  /** The receipt is past its expiry. */
+  | "receipt_expired"
   /** A named rule would admit this value. The caller can obtain a receipt and re-ask. */
   | "declassification_available"
   /** The value was admitted by a declassification rule. */
@@ -313,6 +329,15 @@ export interface Verdict {
   readonly reasons: readonly Reason[];
   /** Work the shell should perform. Empty for a plain ALLOW. */
   readonly effects: readonly Effect[];
+  /**
+   * Receipts this decision consumed. The shell must mark them spent, ATOMICALLY with performing the
+   * action, or the ledger lies and the next replay succeeds.
+   *
+   * Empty unless the decision is `ALLOW`: evidence is burned only when it does work. Burning a
+   * receipt on a refusal is how a single-use human confirmation gets exhausted ten minutes before
+   * the action that needed it.
+   */
+  readonly spends: readonly ReceiptId[];
 }
 
 // -------------------------------------------------------------------------------------------
@@ -448,9 +473,22 @@ export interface ActionArg {
    * a plain string somewhere in between. Neither is sufficient alone and both are cheap.
    */
   readonly derivedFrom: readonly SourceId[];
-  /** A receipt admitting this value, when the caller has obtained one. */
-  readonly receipt?: ReceiptId;
+  /**
+   * The concrete value this argument carries, when the caller can supply it.
+   *
+   * Optional, because the engine's primary check is provenance and works without it. Supplying it
+   * enables the one thing provenance alone cannot do: verifying that a receipt admits THE VALUE
+   * BEING USED rather than some value. Without it a receipt is a claim about a slot; with it, it is
+   * a claim about a slot and its contents, and the check-versus-use gap closes.
+   */
+  readonly value?: string;
 }
+
+// NOTE: this interface used to carry `receipt?: ReceiptId`. It was dead - declared, exported, and
+// read by nothing - while its comment claimed "a receipt is never a bearer token", a guarantee
+// nothing enforced. A receipt is now bound to its slot at ISSUANCE, by `argName` on
+// `Declassification`, which achieves the binding the field only claimed. Carrying an id here as well
+// would be a second, weaker copy of the same fact.
 
 /** What the agent wants to do, and with what. The unit the policy engine judges. */
 export interface ProposedAction {

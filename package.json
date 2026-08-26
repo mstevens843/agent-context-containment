@@ -16,6 +16,8 @@
     "typecheck": "turbo run typecheck",
     "lint": "biome check .",
     "verify:corpus": "bash scripts/verify-corpus.sh",
+    "verify:freeze": "bash scripts/verify-freeze.sh",
+    "record:freeze": "bash scripts/record-freeze.sh",
     "lint:fix": "biome check --fix --unsafe .",
     "format": "biome format --write .",
     "clean": "turbo run clean && rm -rf node_modules",

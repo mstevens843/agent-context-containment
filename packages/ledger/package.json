@@ -1,0 +1,42 @@
+{
+  "name": "@agent-containment/ledger",
+  "version": "0.0.1",
+  "description": "A stateful receipt ledger and a safe wrapper around the pure policy engine. The recommended integration path.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mstevens843/agent-context-containment.git",
+    "directory": "packages/ledger"
+  },
+  "bugs": {
+    "url": "https://github.com/mstevens843/agent-context-containment/issues"
+  },
+  "homepage": "https://github.com/mstevens843/agent-context-containment/tree/main/packages/ledger#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@agent-containment/core": "workspace:*"
+  }
+}

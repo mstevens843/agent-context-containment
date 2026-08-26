@@ -31,6 +31,10 @@ An untrusted source influencing **which capability is invoked, or with what argu
 - token metadata choosing a broadcast target
 - a tool response supplying a value that fills a sensitive argument
 - data leaving via a URL, a memo, or a mail body
+- **replaying a declassification** — reusing one human confirmation across a retry loop, or using a
+  receipt obtained for one value, one argument, one capability or one source on another
+- **combining independently-admitted values** into an action nobody approved — a valid recipient
+  plus a valid amount forming a transfer that was never reviewed as a transfer
 
 ## What is explicitly out of scope
 

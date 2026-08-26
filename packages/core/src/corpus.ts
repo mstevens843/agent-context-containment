@@ -43,8 +43,39 @@ export type CaseId = TuningCaseId | HoldoutCaseId;
 export const tuningCaseId = (v: string): TuningCaseId => v as TuningCaseId;
 export const holdoutCaseId = (v: string): HoldoutCaseId => v as HoldoutCaseId;
 
-/** Which half of the corpus a case belongs to. Also encoded in the id, so moving one is loud. */
-export type Split = "tuning" | "holdout";
+/**
+ * Which split a case belongs to. Also encoded in the id, so moving one between splits is loud.
+ *
+ * The splits are not interchangeable and their results are never pooled into one number:
+ *
+ *   `holdout`    frozen at v0, authored before the engine existed. The instrument.  ids `-h-`
+ *   `tuning`     freely editable. Where a case goes when the holdout is found wanting.  ids `-t-`
+ *   `derived`    hand-derived from published benchmark material, with attribution.  ids `-d-`
+ *   `holdout_v2` a second frozen split, closing the laundering gap v0 missed.  ids `-h2-`
+ *   `adaptive`   evasion shapes an attacker would reach for once they know the design.  ids `-ad-`
+ *   `generated`  every laundering transform applied to every base case, mechanically.  ids `-gen-`
+ */
+export type Split = "tuning" | "holdout" | "derived" | "holdout_v2" | "adaptive" | "generated";
+
+/** Every split, for iteration. */
+export const ALL_SPLITS: readonly Split[] = [
+  "holdout",
+  "holdout_v2",
+  "tuning",
+  "derived",
+  "adaptive",
+  "generated",
+] as const;
+
+/** The id infix each split uses. A case whose id and split disagree is a corpus violation. */
+export const SPLIT_INFIX: Readonly<Record<Split, string>> = {
+  holdout: "-h-",
+  holdout_v2: "-h2-",
+  tuning: "-t-",
+  derived: "-d-",
+  adaptive: "-ad-",
+  generated: "-gen-",
+};
 
 /** The attack surface a case exercises. */
 export type AttackClass =
@@ -110,6 +141,69 @@ export interface ExpectedOutcome {
   readonly rationale: string;
 }
 
+/**
+ * A declassification a case supplies, described declaratively.
+ *
+ * The case names a rule and its inputs; the runner calls the real `admit*` function to mint the
+ * receipt. That is deliberately more work than carrying a finished receipt object, and it buys the
+ * thing that matters: **a bug in `admitAllowlistMember` fails the corpus.** A case carrying a
+ * pre-built receipt would only ever test `decide()`'s matching predicate, leaving the rules
+ * themselves graded by nothing - which is exactly the coverage hole this schema was added to close.
+ *
+ * It also keeps the corpus readable by someone not using this library: the params are plain JSON
+ * describing what the human, or the allowlist, actually said.
+ */
+export type CorpusReceiptSpec = {
+  /** The argument this receipt admits into. Must name a real argument of the proposed action. */
+  readonly argName: string;
+  readonly capability: Capability;
+  readonly role: ParamRole;
+  readonly lifts: Taint;
+  /** Optional expiry, for cases about staleness. Compared against the case's `now`. */
+  readonly expiresAt?: number;
+  /** Optional source binding, for cases about a receipt being reused on another source's value. */
+  readonly boundToSource?: string;
+} & (
+  | {
+      readonly rule: "user_confirmed_value";
+      readonly candidate: string;
+      readonly presented: string;
+    }
+  | {
+      readonly rule: "allowlist_member";
+      readonly candidate: string;
+      readonly allowlist: readonly string[];
+    }
+  | { readonly rule: "echo_of_clean"; readonly candidate: string; readonly cleanValue: string }
+  | {
+      readonly rule: "clean_selection";
+      readonly index: number;
+      readonly collection: readonly string[];
+    }
+  | {
+      /**
+       * Attested tool output.
+       *
+       * `trustedKeys` is a STAND-IN for signature verification, and saying so is the point. A corpus
+       * case is JSON and cannot carry a verifier function, so the runner supplies one that accepts
+       * iff `keyId` is in this list. That tests the rule's binding, purpose-scoping and capability
+       * narrowing - everything except the cryptography, which this package deliberately does not do.
+       */
+      readonly rule: "attested_tool_output";
+      readonly candidate: string;
+      readonly keyId: string;
+      readonly subject: string;
+      readonly trustedKeys: readonly string[];
+    }
+  | {
+      readonly rule: "numeric_envelope";
+      readonly candidate: number;
+      readonly low: number;
+      readonly high: number;
+      readonly granularity: number;
+    }
+);
+
 /** One case. */
 export interface CorpusCase {
   readonly schemaVersion: 1;
@@ -140,6 +234,16 @@ export interface CorpusCase {
    * counting it in the report, is cheaper than being caught not saying it.
    */
   readonly containmentLimit: string | null;
+
+  /**
+   * Declassifications the caller obtained before proposing this action.
+   *
+   * OPTIONAL, and that is load-bearing rather than incidental: the v0 holdout is frozen, so every
+   * schema addition has to leave its 16 JSON files parsing unchanged and byte-identical.
+   */
+  readonly receipts?: readonly CorpusReceiptSpec[];
+  /** True when a human has confirmed this action. Exercises the confirmation gate. */
+  readonly confirmed?: boolean;
 
   readonly source: CaseSource;
   readonly authoredAt: string;
@@ -178,7 +282,17 @@ export type CorpusViolationCode =
    * from a text detector - one sees a different capability, the other sees the same string twice.
    * Forbidding it would forbid the corpus's best evidence.
    */
-  | "ATTACK_FILED_AS_BENIGN";
+  | "ATTACK_FILED_AS_BENIGN"
+  /** A receipt naming an argument the proposed action does not have. */
+  | "RECEIPT_FOR_UNKNOWN_ARG"
+  /**
+   * A case that expects its receipt to work, supplying one that can never match the slot.
+   *
+   * Only an error when the case expects ALLOW. A case expecting a refusal may deliberately supply a
+   * mismatched receipt - that is how you test that a confirmation for `email_send` grants nothing to
+   * `payment` - and forbidding it would forbid the corpus's own anti-bearer-token cases.
+   */
+  | "RECEIPT_CANNOT_MATCH_ITS_SLOT";
 
 export interface CorpusViolation {
   readonly code: CorpusViolationCode;
@@ -236,9 +350,24 @@ export function checkCorpus(cases: readonly CorpusCase[]): CorpusViolation[] {
     }
 
     // ---- split discipline --------------------------------------------------------------------
-    const looksHoldout = (c.id as string).includes("-h-");
-    if (looksHoldout !== (c.split === "holdout")) {
-      push("SPLIT_ID_MISMATCH", c.id, `id and split disagree (split="${c.split}")`);
+    // The id carries the split, so moving a case between splits changes its id and shows up in every
+    // diff. That matters most for the two frozen splits: a case quietly relabelled out of a holdout
+    // is the cheapest way to make an instrument agree with the thing it is measuring.
+    if (!(c.id as string).includes(SPLIT_INFIX[c.split])) {
+      push(
+        "SPLIT_ID_MISMATCH",
+        c.id,
+        `split="${c.split}" expects the id to contain "${SPLIT_INFIX[c.split]}"`,
+      );
+    }
+    for (const [split, infix] of Object.entries(SPLIT_INFIX)) {
+      if (split !== c.split && (c.id as string).includes(infix)) {
+        push(
+          "SPLIT_ID_MISMATCH",
+          c.id,
+          `id carries "${infix}" but the case is filed as "${c.split}"`,
+        );
+      }
     }
 
     // ---- grading discipline ------------------------------------------------------------------
@@ -252,6 +381,30 @@ export function checkCorpus(cases: readonly CorpusCase[]): CorpusViolation[] {
     }
     if (!refuses && c.expected.requiredReasons.length > 0) {
       push("ALLOW_WITH_REQUIRED_REASONS", c.id, "expected to allow but names required reasons");
+    }
+
+    // ---- receipts name a real slot ---------------------------------------------------------------
+    // A receipt is bound to one argument of one capability. A spec naming an argument the action does
+    // not have would silently never match, and the case would then pass for the wrong reason - which
+    // is the exact failure this corpus grades other engines on.
+    for (const r of c.receipts ?? []) {
+      const arg = c.proposedAction.args.find((a) => a.name === r.argName);
+      if (arg === undefined) {
+        push(
+          "RECEIPT_FOR_UNKNOWN_ARG",
+          c.id,
+          `receipt names argument "${r.argName}", which the action does not have`,
+        );
+        continue;
+      }
+      const mismatched = arg.role !== r.role || c.proposedAction.capability !== r.capability;
+      if (mismatched && c.expected.containment === "ALLOW") {
+        push(
+          "RECEIPT_CANNOT_MATCH_ITS_SLOT",
+          c.id,
+          `receipt for "${r.argName}" declares ${r.capability}/${r.role} but the slot is ${c.proposedAction.capability}/${arg.role}; the case expects ALLOW, so it would pass only if something other than this receipt admitted the value`,
+        );
+      }
     }
 
     // ---- attribution ---------------------------------------------------------------------------

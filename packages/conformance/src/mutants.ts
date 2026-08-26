@@ -22,7 +22,12 @@ import type { ContainmentPolicy, ContainmentRequest, ContainmentResponse } from 
 export const reference: ContainmentPolicy = {
   name: "M0 reference",
   decide: (r: ContainmentRequest): ContainmentResponse => {
-    const v = decide({ action: r.action, sources: r.sources });
+    const v = decide({
+      action: r.action,
+      sources: r.sources,
+      receipts: r.receipts,
+      confirmed: r.confirmed,
+    });
     return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
   },
 };
@@ -36,7 +41,10 @@ const withPolicy = (
   return {
     name,
     decide: (r) => {
-      const v = decide({ action: r.action, sources: r.sources }, policy);
+      const v = decide(
+        { action: r.action, sources: r.sources, receipts: r.receipts, confirmed: r.confirmed },
+        policy,
+      );
       return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
     },
   };
@@ -104,7 +112,12 @@ export const noJoin: ContainmentPolicy = {
         : { ...s, provenance: "USER" as const },
     );
     const anyTrusted = r.sources.some((s) => s.provenance === "SYSTEM" || s.provenance === "USER");
-    const v = decide({ action: r.action, sources: anyTrusted ? weakened : r.sources });
+    const v = decide({
+      action: r.action,
+      sources: anyTrusted ? weakened : r.sources,
+      receipts: r.receipts,
+      confirmed: r.confirmed,
+    });
     return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
   },
 };
@@ -120,7 +133,12 @@ export const modelLaunders: ContainmentPolicy = {
   name: "M4 model_launders",
   decide: (r) => {
     const flattened = r.sources.map(({ id, provenance }) => ({ id, provenance }));
-    const v = decide({ action: r.action, sources: flattened });
+    const v = decide({
+      action: r.action,
+      sources: flattened,
+      receipts: r.receipts,
+      confirmed: r.confirmed,
+    });
     return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
   },
 };
@@ -159,7 +177,79 @@ export const denylistInside: ContainmentPolicy = {
   decide: (r) => {
     const suspicious = Object.values(r.content).some((t) => detect(t).matched);
     if (!suspicious) return { decision: "ALLOW", reasons: ["within_taint_ceiling"] };
-    const v = decide({ action: r.action, sources: r.sources });
+    const v = decide({
+      action: r.action,
+      sources: r.sources,
+      receipts: r.receipts,
+      confirmed: r.confirmed,
+    });
+    return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
+  },
+};
+
+/**
+ * M7. Treats a receipt as a bearer token for the whole action.
+ *
+ * Drops `argName` from the matching predicate, so a confirmation obtained for one argument admits
+ * every other argument of the same capability and role. The most plausible wrong implementation in
+ * the set, because the shortcut is invisible: every case with a single receipted argument still
+ * passes, and the defect only appears when one action has two arguments in the same slot type.
+ *
+ * It exists because the receipt machinery would otherwise ship ungraded - the five-conjunct
+ * predicate in `decide()` had zero mutation coverage before this phase, and a corpus that exercises
+ * a feature without a mutant that breaks it is a corpus that cannot tell working from broken.
+ */
+export const receiptBearerToken: ContainmentPolicy = {
+  name: "M7 receipt_bearer_token",
+  decide: (r) => {
+    // Widens ONLY the receipt's binding: one copy per argument name, everything else untouched.
+    //
+    // The first version blanked the argument names on both sides instead, which worked until the
+    // tuple gate arrived - two arguments then shared a name, the gate saw one combination admitted
+    // twice, and it escalated. The mutant was rescued by a mechanism that has nothing to do with its
+    // defect, so it stopped being caught and the suite reported it as discriminated. Same failure as
+    // M1's first version, and the same lesson: a mutant must contain its defect and NOTHING ELSE, or
+    // an unrelated change quietly turns it into a pass.
+    const names = r.action.args.map((a) => a.name);
+    const widened = r.receipts.flatMap((x) => names.map((argName) => ({ ...x, argName })));
+    const v = decide({
+      action: r.action,
+      sources: r.sources,
+      receipts: widened,
+      confirmed: r.confirmed,
+    });
+    return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
+  },
+};
+
+/**
+ * M8. Walks the provenance graph exactly one hop.
+ *
+ * A strictly better engine than M4 - it DOES inherit taint, so a single summary of a hostile page is
+ * caught - and still wrong, because taint is transitive and this stops after one edge. Two hops
+ * through our own tools and the value comes out clean.
+ *
+ * It exists because "does the engine launder?" turned out to be two questions rather than one, and
+ * v0 could not have told them apart even if it had discriminated M4: the difference only shows up on
+ * a case with a chain longer than one, and v0 has none. `lau-h2-004` is that case.
+ */
+export const oneHopOnly: ContainmentPolicy = {
+  name: "M8 one_hop_only",
+  decide: (r) => {
+    // Flatten anything more than one edge from a root, keeping the first hop intact.
+    const byId = new Map(r.sources.map((s) => [s.id as string, s]));
+    const shallow = r.sources.map((s) => {
+      const parents = s.derivedFrom ?? [];
+      if (parents.length === 0) return s;
+      const grandparents = parents.flatMap((id) => byId.get(id as string)?.derivedFrom ?? []);
+      return grandparents.length > 0 ? { id: s.id, provenance: s.provenance } : s;
+    });
+    const v = decide({
+      action: r.action,
+      sources: shallow,
+      receipts: r.receipts,
+      confirmed: r.confirmed,
+    });
     return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
   },
 };
@@ -173,4 +263,6 @@ export const MUTANTS: readonly ContainmentPolicy[] = [
   modelLaunders,
   paranoid,
   denylistInside,
+  receiptBearerToken,
+  oneHopOnly,
 ];

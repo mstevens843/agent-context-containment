@@ -11,12 +11,41 @@ export {
 export { loadSplit } from "./load.js";
 
 export {
+  type Task,
+  type TaskReport,
+  type TaskResult,
+  type TaskStep,
+  formatTasks,
+  runTask,
+  runTasks,
+} from "./tasks.js";
+
+export {
+  type LaunderingTransform,
+  TRANSFORMS,
+  generateAll,
+  launder,
+} from "./generate.js";
+
+export {
+  type SplitMetrics,
+  type UtilityMetrics,
+  compareAll,
+  formatUtility,
+  utilityFor,
+  formatComparison,
+  metricsFor,
+} from "./compare.js";
+
+export {
   MUTANTS,
   denylistInside,
   effectOnly,
   modelLaunders,
   noJoin,
+  oneHopOnly,
   paranoid,
+  receiptBearerToken,
   reference,
   schemaIsTrust,
 } from "./mutants.js";

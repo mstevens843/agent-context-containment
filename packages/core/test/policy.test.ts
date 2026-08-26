@@ -10,7 +10,10 @@ import {
   ALL_DECLASSIFICATION_RULES,
   ALL_PARAM_ROLES,
   CAPABILITY_POLICY,
+  actionId,
   ceilingFor,
+  decide,
+  sourceId,
   taintAtMost,
 } from "../src/index.js";
 
@@ -136,5 +139,89 @@ describe("CAPABILITY_POLICY", () => {
     const account = CAPABILITY_POLICY.account_modify;
     expect([fetch.effect, fetch.egress]).toEqual(["none", "full"]);
     expect([account.effect, account.egress]).toEqual(["irreversible", "metadata"]);
+  });
+});
+
+describe("the four decisions", () => {
+  // All four are reachable and all four are reached here, directly. Before this phase NEEDS_REVIEW
+  // was produced by no corpus case and no test - one of four advertised decisions, entirely
+  // unexercised. Nothing had to be loosened to reach it, which was the risk worth checking.
+
+  const payment = (over: { confirmed?: boolean; provenance?: "USER" | "WEB" } = {}) =>
+    decide({
+      action: {
+        id: actionId("d"),
+        capability: "payment",
+        tool: "payments.transfer",
+        args: [
+          { name: "destination", role: "sink_identity", derivedFrom: [sourceId("s")] },
+          { name: "amount", role: "magnitude", derivedFrom: [sourceId("s")] },
+        ],
+      },
+      sources: [{ id: sourceId("s"), provenance: over.provenance ?? "USER" }],
+      ...(over.confirmed !== undefined ? { confirmed: over.confirmed } : {}),
+    });
+
+  it("ALLOW when every ceiling is met and the confirmation gate is satisfied", () => {
+    expect(payment({ confirmed: true }).decision).toBe("ALLOW");
+  });
+
+  it("NEEDS_REVIEW when the ceilings are met but a human has not confirmed", () => {
+    // Confirmation is driven by the EFFECT axis, not by taint. Everything here is user-controlled
+    // and within its ceiling; the review exists because the action cannot be undone.
+    const v = payment();
+    expect(v.decision).toBe("NEEDS_REVIEW");
+    expect(v.reasons.map((r) => r.code)).toContain("confirmation_required");
+    expect(v.effects.map((e) => e.type)).toEqual(["LOG_DECISION", "ESCALATE"]);
+  });
+
+  it("NEEDS_DECLASSIFICATION when a ceiling is exceeded and a rule could lift it", () => {
+    const v = payment({ provenance: "WEB" });
+    expect(v.decision).toBe("NEEDS_DECLASSIFICATION");
+    expect(v.reasons.map((r) => r.code)).toContain("declassification_available");
+  });
+
+  it("DENY when a ceiling is exceeded and nothing can lift it", () => {
+    // The livelock avoidance. Answering NEEDS_DECLASSIFICATION on an unliftable row would ask for a
+    // receipt no rule can issue, so a persistent agent grinds against it until a budget runs out or
+    // a human routes around the control.
+    const v = decide({
+      action: {
+        id: actionId("d"),
+        capability: "wallet_sign",
+        tool: "wallet.sign",
+        args: [{ name: "payload", role: "payload", derivedFrom: [sourceId("s")] }],
+      },
+      sources: [{ id: sourceId("s"), provenance: "WEB" }],
+    });
+    expect(v.decision).toBe("DENY");
+    expect(v.reasons.map((r) => r.code)).not.toContain("declassification_available");
+  });
+
+  it("the taint gate runs before the confirmation gate, so a click cannot lift a ceiling", () => {
+    // Two different questions that both look like a dialog. Declassification asks "is this extracted
+    // value what you meant?"; confirmation asks "this moves money, proceed?". Prompting for the
+    // second while the first is outstanding asks a human to launder taint by clicking.
+    expect(payment({ provenance: "WEB", confirmed: true }).decision).toBe("NEEDS_DECLASSIFICATION");
+  });
+
+  it("every capability that requires confirmation can actually reach the review gate", () => {
+    for (const k of ALL_CAPABILITIES) {
+      const row = CAPABILITY_POLICY[k];
+      if (!row.requiresConfirmation) continue;
+      // Feed it a SYSTEM source so no ceiling can be the reason it refuses.
+      const v = decide({
+        action: {
+          id: actionId("d"),
+          capability: k,
+          tool: "t",
+          args: [{ name: "a", role: "sink_identity", derivedFrom: [sourceId("s")] }],
+        },
+        sources: [{ id: sourceId("s"), provenance: "SYSTEM" }],
+      });
+      expect(v.decision, `${k} requires confirmation but never reaches the review gate`).toBe(
+        "NEEDS_REVIEW",
+      );
+    }
   });
 });

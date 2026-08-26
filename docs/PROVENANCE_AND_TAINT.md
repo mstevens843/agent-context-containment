@@ -85,16 +85,33 @@ rule over-blocks. What matters is a splice in an argument that decides **where**
 So the splice check asks: *is there one argument, in a steering role, assembled from more than one
 trust class?*
 
-### It currently cannot fire, and that is proven rather than assumed
+### It fires, and it is inert as a gate — two different claims
 
-`policy.test.ts` asserts that every steering role on a capability with a real effect sits at or below
-`USER_CONTROLLED`. Given that, any splice reaching the check has already exceeded its ceiling and
-been refused. **The ceiling subsumes the splice.**
+An earlier version of this document said the check "currently cannot fire, and that is proven rather
+than assumed". **That was wrong**, and the correction is recorded in `DEFECTS_FOUND.md` §6 because a
+repository arguing for honest reporting does not get to leave a false claim in its own docs.
 
-The check stays anyway. It is the guard for a band that is currently empty: loosen a steering ceiling
-and it activates on its own, while the invariant test fails at the same moment to say the band has
-opened. Deleting it would make a future loosening silent. Shipping it *without* the invariant would
-be worse - a rule that looks like a control and never fires.
+The splice check **does** fire. A `read_only_tool` call whose `sink_identity` is assembled from a
+`TOOL_OUTPUT` source and a `SYSTEM` source yields `reasons: [mixed_provenance, within_taint_ceiling]`
+— tuning case `tool-t-002` is exactly this shape. `read_only_tool` has `effect: "none"` and admits
+`TOOL_DERIVED` in a sink, so the splice is well within its ceiling and is reported.
+
+What it cannot currently do is change the **decision**. The escalation is gated on
+`row.effect === "irreversible"`, and `policy.test.ts` asserts every steering role on a capability
+with a real effect sits at or below `USER_CONTROLLED` — so any splice that would reach the escalation
+has already exceeded its ceiling and been refused. **The ceiling subsumes the splice as a gate; it
+does not subsume it as a signal.**
+
+Keep the two apart:
+
+| | today |
+|---|---|
+| splice is detected and appears in `reasons` | **yes** |
+| splice can change ALLOW into NEEDS_REVIEW | **no** — no acting capability admits a splice within ceiling |
+
+The check stays because it guards a band that is currently empty. Loosen a steering ceiling on an
+acting capability and the gate activates on its own, while the invariant test fails at the same
+moment to say the band has opened. Deleting it would make that future loosening silent.
 
 ### The related fail-closed rule
 

@@ -64,6 +64,72 @@ const biteCount = (policy: (typeof MUTANTS)[number], corpus: typeof cases): numb
     return r.groundTruth === "attack" ? !r.containmentRefused : r.containmentRefused;
   }).length;
 
+describe("exact decision agreement", () => {
+  it("records the frozen holdout cases whose expected DECISION WORD the engine does not produce", () => {
+    // A finding, recorded rather than fixed, because the holdout is frozen.
+    //
+    // The 2x2 collapses all three refusal words into a boolean - `decision !== "ALLOW"` - so a case
+    // expecting DENY passes while the engine returns NEEDS_DECLASSIFICATION. Eight holdout cases sit
+    // in that gap, and the suite was green through all of them.
+    //
+    // ON INSPECTION THE ENGINE IS RIGHT AND THE FROZEN EXPECTATIONS ARE WRONG. Each of the eight
+    // names a capability whose `liftableBy` is non-empty, so a declassification route genuinely
+    // exists and NEEDS_DECLASSIFICATION is the more precise answer - a flat DENY would tell the
+    // caller there is no way forward when there is one. The cases were authored before the engine
+    // existed, which is the whole point of the ordering, and this is the cost of that: the author
+    // guessed the decision word and guessed a little too harshly.
+    //
+    // This is the same class as the reason-substitution defect one level up. There the reason was
+    // graded and the engine was wrong; here the decision word was never graded at all.
+    const report = runCorpus({ cases, policy: reference });
+    const off = report.results
+      .filter((r) => !r.decisionExact)
+      .map((r) => `${r.id}: ${r.expected} -> ${r.decision}`)
+      .sort();
+    console.log(`\nholdout cases where the decision word differs:\n  ${off.join("\n  ")}\n`);
+    expect(off).toEqual([
+      "doc-h-001: DENY -> NEEDS_DECLASSIFICATION",
+      "email-h-001: DENY -> NEEDS_DECLASSIFICATION",
+      "rag-h-001: DENY -> NEEDS_DECLASSIFICATION",
+      "rag-h-002: DENY -> NEEDS_DECLASSIFICATION",
+      "tok-h-001: DENY -> NEEDS_DECLASSIFICATION",
+      "tool-h-002: DENY -> NEEDS_DECLASSIFICATION",
+      "web-h-001: DENY -> NEEDS_DECLASSIFICATION",
+      "web-h-002: DENY -> NEEDS_DECLASSIFICATION",
+    ]);
+  });
+
+  it("every case is refused or allowed as the case intended, whatever word was used", () => {
+    // The weaker claim that IS true of the holdout: the engine never allows something the case
+    // expected refused, nor refuses something it expected allowed. Only the word differs.
+    const report = runCorpus({ cases, policy: reference });
+    const wrongDirection = report.results.filter(
+      (r) => r.containmentRefused !== (r.expected !== "ALLOW"),
+    );
+    expect(wrongDirection.map((r) => r.id)).toEqual([]);
+  });
+
+  it("the tuning corpus agrees exactly, because it was written against the engine", () => {
+    const report = runCorpus({ cases: tuning, policy: reference });
+    const off = report.results.filter((r) => !r.decisionExact).map((r) => r.id);
+    expect(off).toEqual([]);
+  });
+
+  it("all four decisions are produced by real corpus cases", () => {
+    // Before this phase the corpus produced three of four. NEEDS_REVIEW was advertised in the README
+    // and reachable in the engine and exercised by nothing.
+    const produced = new Set(
+      runCorpus({ cases: [...cases, ...tuning], policy: reference }).results.map((r) => r.decision),
+    );
+    expect([...produced].sort()).toEqual([
+      "ALLOW",
+      "DENY",
+      "NEEDS_DECLASSIFICATION",
+      "NEEDS_REVIEW",
+    ]);
+  });
+});
+
 describe("provenance and capability decide, not wording", () => {
   // The property the whole project rests on, asserted directly rather than inferred from a rate.
   const pairs: readonly (readonly [string, string])[] = [
@@ -126,15 +192,38 @@ describe("mutants", () => {
 
   it("records which mutants the HOLDOUT alone fails to discriminate", () => {
     // Not an assertion that this set is empty - it is not, and pretending otherwise would be the
-    // whole failure this project is about. `model_launders` is caught only by the tuning corpus:
-    // holdout tool-h-002 aims at that defect and misses, because payment's sink ceiling is strict
-    // enough that a laundering engine refuses anyway, for a reason the case did not name. The
-    // holdout is frozen, so the gap is RECORDED rather than edited away.
+    // whole failure this project is about. Two mutants are invisible to the frozen split, for two
+    // different reasons, and both are recorded rather than edited away:
+    //
+    //   M4 model_launders - a genuine COVERAGE GAP. Holdout tool-h-002 argues at length that a model
+    //   summary must inherit its source's taint and is the only holdout case aimed at laundering. It
+    //   does not discriminate: payment's sink ceiling is strict enough that a laundering engine
+    //   refuses anyway, for a reason the case never named. Covered by tuning tool-t-001 instead.
+    //
+    //   M7 receipt_bearer_token - not a gap, a DATE. The holdout was frozen at v0, before the receipt
+    //   machinery existed, so it contains no case supplying a receipt and nothing there can bite a
+    //   receipt-handling defect. Covered by tuning rcpt-t-003.
+    //
+    //   M8 one_hop_only - both. v0 contains no provenance chain longer than one edge, so a defect
+    //   that only appears on the second hop has nothing to bite on. Covered by holdout_v2 lau-h2-004.
+    //
+    // The distinction matters: one says the instrument missed something it was aiming at, the others
+    // say the instrument predates the thing being measured. Only the first is a defect. All three are
+    // closed elsewhere - M4 and M8 by holdout_v2, M7 by tuning - and none by editing v1.
     const blind = MUTANTS.filter((m) => m !== reference && biteCount(m, cases) === 0).map(
       (m) => m.name,
     );
     console.log("\nmutants the holdout does NOT discriminate:", blind, "\n");
-    expect(blind).toEqual(["M4 model_launders"]);
+    expect(blind).toEqual(["M4 model_launders", "M7 receipt_bearer_token", "M8 one_hop_only"]);
+  });
+
+  it("the receipt mutant IS bitten by the tuning corpus, so the machinery is graded", () => {
+    const m = MUTANTS.find((x) => x.name.startsWith("M7"));
+    if (m === undefined) throw new Error("M7 missing");
+    expect(
+      biteCount(m, tuning),
+      "M7 is graded by nothing; the receipt machinery is untested",
+    ).toBeGreaterThan(0);
   });
 
   it("the suite discriminates: no mutant fails everything", () => {
