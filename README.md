@@ -56,7 +56,7 @@ scores 100% on attacks in every split. The benign column is what tells them apar
 
 | split | what it is worth |
 |---|---|
-| `holdout` (16) | frozen **before the engine existed**. The only split with an ordering property |
+| `holdout` (16) | frozen by manifest, CI-gated. Written before the engine — but that ordering was never committed, so it is **not provable**. See below |
 | `holdout_v2` (6) | frozen, authored *after* the engine. Closes v0's laundering gap. **Not a blind instrument** |
 | `tuning` (23) | freely editable. Agreement here is close to tautological |
 | `derived` (6) | attack shapes designed by **other people** — least circular evidence here, and smallest |
@@ -268,8 +268,16 @@ zero-width characters but cannot see pixels.
 
 **Scaffolding:** n=16 holdout and n=8 tuning. This is a test suite, not a benchmark. No adaptive
 attacker. No end-to-end task utility measurement - CaMeL's honest "77 vs 84" has no equivalent here.
-The freeze is **not yet cashed**: `FREEZE.json` records `frozenAtCommit: null` because the repo is
-uncommitted, so "the holdout predates the engine" is currently a claim rather than a `git` fact.
+**The git-object freeze was attempted and failed, and is not obtainable here.** A commit was recorded
+and `verify:freeze` rejected it — the engine was already present at that commit — and the history
+contains no holdout-only pre-engine commit, because the corpus and the engine were first committed
+together. So `frozenAtCommit` is `null` and stays there.
+
+What survives is narrower and is what the project claims: the 16 holdout cases have not changed,
+their bytes are covered by `MANIFEST.sha256`, CI verifies that before anything else runs, and it has
+caught a real drift once. What is **not** claimed anywhere: that the holdout is proven to predate the
+engine. The lesson is in `docs/EVALS.md` — authoring order leaves no trace, commit order does, and
+the holdout has to be *committed* before the engine exists rather than merely written first.
 
 ## Integration
 

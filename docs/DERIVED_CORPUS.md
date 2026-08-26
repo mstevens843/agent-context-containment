@@ -6,7 +6,7 @@ attribution in `corpus/derived/ATTRIBUTION.md`; this document is about what the 
 ## The problem it addresses
 
 Every other case in this corpus was written by the same person who wrote the policy engine. The
-structural mitigations — a holdout frozen before the engine existed, branded split types,
+structural mitigations — a manifest-frozen, CI-gated holdout, branded split types,
 reason-level grading, seven mutants — reduce self-deception. **They do not eliminate it, and no
 mechanism internal to a single author can.** If I unconsciously wrote attacks my design already
 handled, nothing in the repository would notice.

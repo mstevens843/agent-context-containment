@@ -2,8 +2,22 @@
   "version": 1,
   "caseCount": 16,
   "frozenAt": "2026-08-25",
-  "frozenAtCommit": "7bb2accefc902957ff90de3ff6cb0e6d69452efe",
-  "rationale": "Authored against packages/core/src/corpus.ts and packages/core/src/types.ts, both of which are specification. packages/core/src/policy.ts - the engine - did not exist when these cases were written.",
-  "verify": "git cat-file -e 7bb2accefc902957ff90de3ff6cb0e6d69452efe:packages/core/src/policy.ts   # MUST exit non-zero",
-  "note": "frozenAtCommit is null because this repository has not been committed yet. The ordering claim is only worth something once it is a git fact. Run docs/EVALS.md's freeze procedure before quoting any holdout number: commit at the point where the corpus exists and the engine does not, record the sha here, and tag it. A freeze file that merely asserts the corpus came first is worth nothing."
+  "frozenAtCommit": null,
+  "state": "attempted_and_failed",
+  "whatIsProven": "The 16 holdout cases have not changed. corpus/holdout/MANIFEST.sha256 covers their bytes, CI verifies it on every run before anything else executes, and it has caught a real drift once - a formatter rewriting JSON whitespace.",
+  "whatIsNotProven": "That the holdout was authored before the policy engine existed. That is a claim about ORDERING, and only a git object can carry it.",
+  "attempt": {
+    "recordedCommit": "7bb2accefc902957ff90de3ff6cb0e6d69452efe",
+    "result": "REJECTED by scripts/verify-freeze.sh",
+    "reason": "packages/core/src/policy.ts is present at that commit, so the commit cannot witness a point where the corpus existed and the engine did not.",
+    "conclusion": "No holdout-only pre-engine commit exists in this repository's history. The corpus and the engine were first committed together, so there is no object to point at and the ordering proof is UNAVAILABLE here - not merely pending."
+  },
+  "lesson": "To cash a freeze of this kind, the holdout must be COMMITTED before the engine exists, not merely written first. Authoring order leaves no trace; commit order does. The sequencing was correct in the working tree and was never captured, which is the same as not having done it - a reviewer can check git and cannot check what order files appeared on a disk.",
+  "howToCashInAFutureRepository": [
+    "1. Author the corpus and the specification it is written against.",
+    "2. Commit them, with no engine in the tree.",
+    "3. Record that sha and tag it, BEFORE writing the engine.",
+    "4. Verify: `git cat-file -e <sha>:packages/core/src/policy.ts` must exit non-zero."
+  ],
+  "doNot": "Do not weaken scripts/verify-freeze.sh to make this pass, and do not record a commit that does not satisfy it. A freeze check that can be talked into agreeing is worth less than no freeze check, because it looks like evidence."
 }

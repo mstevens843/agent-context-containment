@@ -35,36 +35,44 @@ if [ -z "$COMMIT" ] || [ "$COMMIT" = "null" ]; then
 FREEZE NOT CASHED: corpus/holdout/FREEZE.json has frozenAtCommit: null
 --------------------------------------------------------------------------------
 
-The v0 holdout was authored before the policy engine existed - the build order was
-sequenced that way deliberately - but the repository has never been committed, so
-there is no object to point at. Until then, that ordering is a claim like any
-other and should not be described as verified.
+IN THIS REPOSITORY, THIS IS EXPECTED AND WILL NOT BE FIXED.
 
-TO CASH IT (one time, and it must be done by a human who can run git):
+A freeze was attempted and rejected: the commit recorded already contained
+packages/core/src/policy.ts, so it cannot witness a point where the corpus
+existed and the engine did not. No holdout-only pre-engine commit exists in this
+history - the corpus and the engine were first committed together.
 
-  1. Check out or construct the tree where the corpus exists and the engine does
-     not. If history already contains such a commit, find it:
+So the ordering proof is UNAVAILABLE here, not merely pending. See
+corpus/holdout/FREEZE.json for the full record of the attempt.
 
-       git log --oneline --diff-filter=A -- corpus/holdout
+WHAT IS STILL TRUE, and is what the project claims:
 
-  2. Confirm the engine is absent at that commit. THIS MUST FAIL:
+  - the 16 holdout cases have not changed
+  - MANIFEST.sha256 covers their bytes, and CI verifies it before anything else
+  - that check has caught a real drift once, when a formatter rewrote whitespace
+
+WHAT IS NOT TRUE, and must not be written anywhere:
+
+  - that the holdout is proven to predate the engine
+
+THE LESSON, for the next repository:
+
+  Authoring order leaves no trace. Commit order does. The holdout must be
+  COMMITTED before the engine exists, not merely written first:
+
+  1. Author the corpus and the spec it is written against.
+  2. Commit them, with no engine in the tree.
+  3. Record that sha and tag it, BEFORE writing the engine.
+  4. Verify - this must exit NON-ZERO:
 
        git cat-file -e <sha>:packages/core/src/policy.ts
 
-     If it succeeds, that commit is not the freeze point.
+DO NOT weaken this script to make it pass, and do not record a commit that does
+not satisfy it. A freeze check that can be talked into agreeing is worth less
+than no freeze check at all, because it looks like evidence.
 
-  3. Record it and tag it:
-
-       node -e "const f=require('fs');const p='corpus/holdout/FREEZE.json';
-                const j=JSON.parse(f.readFileSync(p));j.frozenAtCommit='<sha>';
-                f.writeFileSync(p,JSON.stringify(j,null,2)+'\n')"
-       git tag -s corpus-holdout-v1 <sha>
-
-  4. Re-run this script. It will then verify the property on every invocation.
-
-NOTE: cashing the freeze edits FREEZE.json, which is NOT covered by
-MANIFEST.sha256 - the manifest deliberately excludes it, so recording the commit
-does not trip the drift check.
+NOTE: FREEZE.json is deliberately excluded from MANIFEST.sha256, so recording or
+clearing a commit here never trips the drift check.
 --------------------------------------------------------------------------------
 MSG
   exit 1

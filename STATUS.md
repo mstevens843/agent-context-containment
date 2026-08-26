@@ -4,7 +4,7 @@
 
 | | what it established |
 |---|---|
-| **v0** | The frozen corpus and the instrument. 16 holdout cases authored before the engine existed, a `MANIFEST.sha256` over them, and a CI job that gates everything else on their integrity. |
+| **v0** | The frozen corpus and the instrument. 16 holdout cases, a `MANIFEST.sha256` over them, and a CI job that gates everything else on their integrity. (The cases *were* written before the engine; that ordering was never committed, so it is not provable — see below.) |
 | **v0.1** | Coverage of what was already advertised. Direct tests for `declassify`/`check`/`taint` (702 previously untested lines), receipts wired end to end, the attested-tool-output rule from the original brief, `NEEDS_REVIEW` and `DENY` coverage, the wallet example, and test files typechecked for the first time. |
 | **v0.2** | Breadth, and evidence that is not self-authored. A derived split from AgentDojo/InjecAgent shapes, `holdout_v2` closing v0's laundering gap additively, a full RAG pipeline demo, a per-split classifier comparison, a CLI playground, and two new mutants. |
 | **v0.3** | Closing the things a sharp reviewer would call a toy. The prepare/broadcast policy defect fixed surgically, receipt replay/expiry/value/source binding, correlated-parameter tuple checks, an adaptive evasion split, strict freeze tooling, and the first utility measurement. |
@@ -148,18 +148,32 @@ split instead. The frozen set was not loosened to make the engine look better.
 
 Content hashes are in `corpus/holdout/MANIFEST.sha256`.
 
-## Freeze not cashed
+## Freeze: attempted, rejected, unavailable
 
-`corpus/holdout/FREEZE.json` records `frozenAtCommit: null`.
+`corpus/holdout/FREEZE.json` records `frozenAtCommit: null`, and that is now a settled state rather
+than an outstanding task.
 
-The holdout **was** authored before `packages/core/src/policy.ts` existed — the build order was
-sequenced that way deliberately — but the repository has never been committed, so there is no object
-to point at. Until `git cat-file -e <sha>:packages/core/src/policy.ts` exits non-zero, "the holdout
-predates the engine" is a claim like any other rather than a checkable fact.
+A freeze was attempted with commit `7bb2accefc902957ff90de3ff6cb0e6d69452efe`.
+`scripts/verify-freeze.sh` rejected it, correctly: `packages/core/src/policy.ts` is present at that
+commit, so it cannot witness a point where the corpus existed and the engine did not. There is **no
+holdout-only pre-engine commit in this repository** — the corpus and the engine were first committed
+together.
 
-No `git init` or `git commit` has been run. The freeze procedure is written up in `docs/EVALS.md` and
-is deferred by decision.
+| | |
+|---|---|
+| v0 holdout content changed? | **No.** 16 cases, unedited across every pass |
+| v0 holdout bytes protected? | **Yes** — `MANIFEST.sha256`, verified in CI before install, build or tests |
+| drift ever detected? | **Yes, once** — a formatter rewrote JSON whitespace; content was intact, bytes were not |
+| holdout proven to predate the engine? | **No, and not obtainable in this repo** |
 
+**The lesson, recorded because it is the useful part.** Authoring order leaves no trace. Commit order
+does. The sequencing was right in the working tree and was never captured, which is the same as not
+having done it: a reviewer can check `git`, and cannot check what order files appeared on a disk. To
+cash a freeze of this kind, the holdout must be **committed** before the engine exists — not merely
+written first.
+
+`verify:freeze` was not weakened, and no commit that fails it has been recorded. It still exits 1,
+now with the reason above rather than a to-do list.
 ## Derived corpus subset — not built
 
 The plan was "mostly original plus a labelled subset derived from AgentDojo and InjecAgent" (both

@@ -8,7 +8,7 @@ Every one of these is a known gap, not a discovered surprise. Detail follows bel
 
 | # | Gap | Status |
 |---|---|---|
-| 1 | **The frozen holdout has no commit anchor.** `FREEZE.json` records `frozenAtCommit: null`. The holdout was authored before the engine existed, but the repo has never been committed, so nothing can verify it. | Deferred by decision |
+| 1 | **The ordering proof is unavailable, not pending.** A freeze was attempted and correctly rejected: the recorded commit already contained the engine. No holdout-only pre-engine commit exists in this history — corpus and engine were first committed together. `frozenAtCommit` is back to `null` and will stay there. | **Closed as unavailable** |
 | 2 | **The corpus is still overwhelmingly author-written.** 45 of 51 cases. The 6-case derived split is the only material not designed by the policy author, and 6 is small. No mechanism internal to one author closes this. | Reduced, not closed |
 | 3 | **v0's laundering gap is closed by a new split, not by v0.** `holdout_v2` bites `M4` (4 cases) and `M8 one_hop_only` (1). v0 remains blind to both, plus `M7`, and that blindness is asserted as an exact list. Closing it *in v0* would have meant editing a frozen instrument. | Closed additively |
 | 4 | **Replay defence is now hard to omit, not impossible.** `@agent-containment/ledger` types `now` and `spentReceipts` as `never`, so forgetting them is a compile error. A caller who reaches past the guard to the raw engine still can. `jsonFileLedger` is single-process only. | Closed for the recommended path |
@@ -124,11 +124,30 @@ nothing accidentally text-dependent crept in.
 The cases were also chosen because they are cases where text-reading loses. That is a fair
 demonstration of a failure mode and it is not a fair estimate of relative performance in general.
 
-## The freeze is not yet cashed
+## The ordering proof is unavailable
 
-`corpus/holdout/FREEZE.json` records `frozenAtCommit: null`. The holdout *was* authored before the
-engine existed, and that ordering is only worth something once it is a git fact anyone can check. See
-[EVALS.md](EVALS.md). Until then it is a claim like any other.
+`corpus/holdout/FREEZE.json` records `frozenAtCommit: null`, and it will stay that way.
+
+A freeze was attempted. The commit recorded — `7bb2acce…` — already contained
+`packages/core/src/policy.ts`, so `verify:freeze` rejected it: a commit where the engine exists
+cannot witness a point where it did not. Checking the history showed why. **There is no
+holdout-only pre-engine commit.** The corpus and the engine were first committed together, so there
+is no object to point at.
+
+**What is still true, and is what the project claims:**
+
+- the 16 holdout cases have not changed;
+- `MANIFEST.sha256` covers their bytes, and CI verifies it before anything else runs;
+- that check has caught a real drift once, when a formatter rewrote JSON whitespace.
+
+**What is not true, and appears nowhere:** that the holdout is *proven* to predate the engine.
+
+**The lesson.** Authoring order leaves no trace; commit order does. The build was sequenced correctly
+in the working tree and that sequencing was never captured, which is the same as not having done it —
+a reviewer can check `git` and cannot check what order files appeared on a disk. To cash a freeze of
+this kind, the holdout must be **committed** before the engine exists, not merely written first.
+
+`verify:freeze` was not weakened to pass, and no commit that fails it has been recorded.
 
 ## The sample is tiny
 

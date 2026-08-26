@@ -4,7 +4,7 @@
 
 | split | n | frozen | authored | what it is worth |
 |---|---|---|---|---|
-| `holdout` | 16 | yes (v0) | **before the engine existed** | the only split with an ordering property. The instrument. |
+| `holdout` | 16 | yes (v0) | before the engine — **not provable, see below** | the instrument. Frozen by manifest, not by a git object. |
 | `holdout_v2` | 6 | yes | after the engine | a regression split closing v0's laundering gap. **Not a blind instrument** — see below. |
 | `tuning` | 23 | no | after the engine | freely editable. Agreement here is close to tautological and is reported anyway. |
 | `derived` | 9 | no | shapes by other people | least circular evidence in the repo, and smallest. See `DERIVED_CORPUS.md`. |
@@ -12,14 +12,15 @@
 | `generated` | 648 | derived from the two above | mechanical | every transform x every base case, at one and two hops. **Never pooled with a hand-authored split** — 648 variants beside 16 frozen cases would be a worse number than either. |
 
 **They are reported side by side and never summed.** The splits are not samples from one population:
-one was frozen before the engine existed, one after, one is freely editable, one restates other
-people's attack shapes. A single headline number over all four would claim more than any of them
+one is frozen by manifest, one was frozen after the engine, one is freely editable, one restates
+other people's attack shapes. A single headline number over all four would claim more than any of them
 supports, and the comparison reporter refuses to produce one.
 
-**`holdout_v2` does not inherit v1's ordering property**, and calling it a holdout without that
-caveat would be the most self-serving thing in the repository. v1 was written before
-`packages/core/src/policy.ts` existed. v2 was written after, by someone who had read the engine. Its
-`FREEZE.json` says so in an `honesty` field.
+**Neither frozen split carries a proven ordering property.** v1's cases were written before
+`packages/core/src/policy.ts` existed, but that was never committed and is therefore not checkable —
+see the section below. v2 was written after the engine, by someone who had read it, and its
+`FREEZE.json` says so. Both are frozen *by manifest*: their bytes cannot change without CI noticing,
+and neither can be shown to predate anything.
 
 ## Classifier vs containment, by split
 
@@ -171,55 +172,19 @@ impossible.
 classifier heuristic declaring `justifiedBy: readonly TuningCaseId[]` cannot cite a holdout case -
 that is a compile error, not a code-review finding, and code-review findings are the ones you miss.
 
-**The holdout predates the engine.** It was authored against `packages/core/corpus.ts` and
-`types.ts`, both specification, at a point where `packages/core/src/policy.ts` did not exist.
+**The holdout was written before the engine — and that cannot be shown.** The cases were authored
+against `packages/core/corpus.ts` and `types.ts`, both specification, at a point where
+`packages/core/src/policy.ts` did not exist. That was a deliberate build order and it is exactly the
+kind of claim a reader should refuse to take on trust.
 
-**This is not yet cashed, and it must be.** `FREEZE.json` records `frozenAtCommit: null` because the
-repository has not been committed. The procedure:
+They should refuse it here too. A freeze was attempted and rejected — the recorded commit already
+contained the engine — and the history holds no holdout-only pre-engine commit, because the corpus and
+the engine were first committed together. **So this mitigation does not exist for this repository**,
+and the ordering is stated above as history rather than as evidence.
 
-```bash
-# 1. at a commit where the corpus exists and the engine does not:
-git add corpus/ packages/core/src/{types,corpus}.ts docs/
-git commit -m "Spec and holdout corpus, authored before the policy engine"
-FREEZE=$(git rev-parse HEAD)
-
-# 2. the proof - this MUST fail:
-git cat-file -e "$FREEZE:packages/core/src/policy.ts" && echo "BROKEN: engine existed"
-
-# 3. record and tag
-#    write $FREEZE into corpus/holdout/FREEZE.json, then:
-git tag -s corpus-holdout-v1 "$FREEZE"
-```
-
-Until step 2 runs green, the ordering is a claim like any other. A freeze file that merely asserts
-the corpus came first is worth nothing.
-
-### How the freeze is enforced today
-
-Four layers, and only three of them exist:
-
-1. **Content frozen at v0.** 16 holdout cases, unchanged since authoring. When the holdout is found
-   wanting - as it was for `M4 model_launders` - the gap is recorded and a discriminating case goes
-   into `corpus/tuning/`. The frozen set is not loosened to make the engine look better.
-2. **Bytes protected by `corpus/holdout/MANIFEST.sha256`.** SHA-256 per file. This exists because
-   content-unchanged and bytes-unchanged are different claims, and a formatter once quietly falsified
-   the second while leaving the first true (`DEFECTS_FOUND.md` §5).
-3. **Drift guarded in CI.** A dedicated `corpus-integrity` job runs
-   `shasum -a 256 -c corpus/holdout/MANIFEST.sha256` on checkout, before install, before build,
-   before tests, and `build-test` declares `needs: corpus-integrity`. It is its own job rather than a
-   step inside the test command so that a failure reads as *the corpus drifted*, not as *CI broke*.
-   `corpus` is also excluded from biome, so the formatter cannot reach it.
-4. **Git-object freeze - NOT YET DONE.** `FREEZE.json` records `frozenAtCommit: null`.
-
-**Be clear about what layer 2 and 3 are worth.** They prove the holdout matches a digest that was
-recorded at some point. They do not prove *when* it was recorded, and anyone able to edit the corpus
-can edit the manifest in the same commit. That is why `scripts/verify-corpus.sh` says, in the failure
-message, not to regenerate the manifest to make the check pass - the check is only worth anything if
-regenerating it is treated as a decision rather than a fix.
-
-The claim the git freeze buys, and nothing below it can, is **ordering**: that the holdout existed at
-a commit where `packages/core/src/policy.ts` did not. Until that is cashed, "the holdout was not
-written to fit the implementation" remains a claim.
+What remains, and is checkable: the cases have not changed, `MANIFEST.sha256` covers their bytes, and
+CI verifies it before anything else runs. See *How the frozen splits are actually protected* above for
+the full account and the procedure that would work in a future repository.
 
 **Corpus provenance is per-case.** Every case carries `source`: `original`, `derived` (with upstream
 ref, licence and a non-empty `modifications` field), or `cve_derived`. AgentDojo and InjecAgent are
@@ -268,8 +233,8 @@ suite was green through all of them.
 
 On inspection **the engine is right and the frozen expectations are wrong**: each names a row with a
 non-empty `liftableBy`, so a route out genuinely exists and a flat `DENY` would tell the caller there
-is none. The cases were authored before the engine existed — the point of the ordering — and this is
-its cost: the author guessed the decision word, and guessed a little too harshly.
+is none. The cases were authored before the engine was written — which is why the author was guessing
+at decision words at all — and this is the cost of that: the guesses were a little too harsh.
 
 The holdout is frozen, so the mismatch is **asserted as an exact list** in `holdout.test.ts` and
 printed in the report on every run. The weaker claim that *is* true of the holdout is asserted
