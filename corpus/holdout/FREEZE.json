@@ -2,8 +2,8 @@
   "version": 1,
   "caseCount": 16,
   "frozenAt": "2026-08-25",
-  "frozenAtCommit": null,
+  "frozenAtCommit": "7bb2accefc902957ff90de3ff6cb0e6d69452efe",
   "rationale": "Authored against packages/core/src/corpus.ts and packages/core/src/types.ts, both of which are specification. packages/core/src/policy.ts - the engine - did not exist when these cases were written.",
-  "verify": "git cat-file -e <frozenAtCommit>:packages/core/src/policy.ts   # MUST exit non-zero",
+  "verify": "git cat-file -e 7bb2accefc902957ff90de3ff6cb0e6d69452efe:packages/core/src/policy.ts   # MUST exit non-zero",
   "note": "frozenAtCommit is null because this repository has not been committed yet. The ordering claim is only worth something once it is a git fact. Run docs/EVALS.md's freeze procedure before quoting any holdout number: commit at the point where the corpus exists and the engine does not, record the sha here, and tag it. A freeze file that merely asserts the corpus came first is worth nothing."
 }
