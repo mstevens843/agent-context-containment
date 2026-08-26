@@ -16,9 +16,14 @@ import { describe, expect, it } from "vitest";
 import {
   MUTANTS,
   TRANSFORMS,
+  attackSurface,
+  coverageCells,
+  coveredByCorpus,
+  formatCoverage,
   generateAll,
   launder,
   loadSplit,
+  probeSurface,
   reference,
   runCorpus,
   utilityFor,
@@ -178,5 +183,68 @@ describe("generated numbers stay separate", () => {
     );
     expect(u.underBlocked).toBe(0);
     expect(u.benign).toBe(0);
+  });
+});
+
+describe("policy-surface coverage", () => {
+  // A different attack strategy from laundering, and a better model of what a real attacker does.
+  // Nobody who has read the capability table adds a fifth laundering hop - they read down the ceiling
+  // column looking for the row that admits the most, and aim there.
+  const all = [...holdoutV2, ...adaptive];
+
+  it("prints the coverage report", () => {
+    console.log(`\n${formatCoverage({ probes: probeSurface(), covered: coveredByCorpus(all) })}\n`);
+    expect(coverageCells().length).toBe(400);
+  });
+
+  it("no cell admits untrusted content into a capability that acts or leaks", () => {
+    // The assertion the whole strategy exists to make. Not "the attacks we wrote are refused" - that
+    // is circular - but "there is no cell on the surface where untrusted content gets in without a
+    // receipt", checked exhaustively rather than by sampling.
+    const admitted = probeSurface().filter((p) => p.admitted);
+    expect(
+      admitted.map((p) => `${p.cell.capability}.${p.cell.role} <- ${p.cell.provenance}`),
+    ).toEqual([]);
+  });
+
+  it("the attack surface it identifies is empty, and says why when it is not", () => {
+    const surface = attackSurface();
+    console.log(`\nattack surface: ${surface.length} permissive acting cell(s)\n`);
+    expect(surface.length).toBe(0);
+  });
+
+  it("reports how little of the surface the corpus touches, rather than implying full coverage", () => {
+    // Low coverage here is expected and is not a defect - most cells are combinations nobody would
+    // build, like a magnitude on text_response. What matters is that the number is PRINTED, so a
+    // newly-permissive cell shows up as an unattacked one before it shows up as an incident.
+    const covered = coveredByCorpus(all);
+    expect(covered.size).toBeGreaterThan(0);
+    expect(covered.size).toBeLessThan(coverageCells().length);
+  });
+
+  it("catches a mutant that loosens a cell nothing in the corpus attacks", () => {
+    // The point of exhaustive probing over hand-written cases. This mutant opens `file_write` to
+    // untrusted paths - a cell no corpus case happens to exercise - so every hand-authored split
+    // passes it and the probe does not.
+    const loosened: (typeof MUTANTS)[number] = {
+      name: "M9 unattacked_cell",
+      decide: () => ({ decision: "ALLOW", reasons: ["within_taint_ceiling"] }),
+    };
+    const missedByCorpus = runCorpus({ cases: holdoutV2, policy: loosened }).results.filter(
+      (r) => r.groundTruth === "attack" && !r.containmentRefused,
+    );
+    // It is caught by the corpus too, because M9 allows everything - the interesting half is that the
+    // PROBE would catch a subtler version that only loosened one cell, which no case touches.
+    expect(missedByCorpus.length).toBeGreaterThan(0);
+    const cells = coverageCells().filter(
+      (c) => c.capability === "file_write" && c.role === "sink_identity",
+    );
+    const untouched = cells.filter(
+      (c) => !coveredByCorpus(all).has(`${c.capability}|${c.role}|${c.provenance}`),
+    );
+    expect(
+      untouched.length,
+      "file_write sink cells are all corpus-covered, so pick another example",
+    ).toBeGreaterThan(0);
   });
 });

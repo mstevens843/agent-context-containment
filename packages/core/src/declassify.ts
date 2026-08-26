@@ -155,8 +155,16 @@ export function admitAllowlistMember(args: {
   readonly allowlist: readonly string[];
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt is for. A receipt admits one value into one slot. */
+  /** The argument LABEL this receipt is for. A receipt admits one value into one slot. */
   readonly argName: string;
+  /**
+   * The argument SLOT, when the issuer can say - `to`, `recipients[0]`, `message.replyTo`.
+   *
+   * Supply it whenever a tool can carry two arguments with the same label. Without it the receipt
+   * matches by label, and a label that identifies more than one argument matches none of them. See
+   * docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly lifts: Taint;
   /** When it is good for, and where the value came from. */
   readonly scope: ReceiptScope;
@@ -169,6 +177,7 @@ export function admitAllowlistMember(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: match,
@@ -196,8 +205,16 @@ export function admitNumericEnvelope(args: {
   readonly granularity: number;
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt is for. A receipt admits one value into one slot. */
+  /** The argument LABEL this receipt is for. A receipt admits one value into one slot. */
   readonly argName: string;
+  /**
+   * The argument SLOT, when the issuer can say - `to`, `recipients[0]`, `message.replyTo`.
+   *
+   * Supply it whenever a tool can carry two arguments with the same label. Without it the receipt
+   * matches by label, and a label that identifies more than one argument matches none of them. See
+   * docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly lifts: Taint;
   /** When it is good for, and where the value came from. */
   readonly scope: ReceiptScope;
@@ -217,6 +234,7 @@ export function admitNumericEnvelope(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: candidate,
@@ -237,8 +255,16 @@ export function admitEchoOfClean<T>(args: {
   readonly cleanValue: T;
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt is for. A receipt admits one value into one slot. */
+  /** The argument LABEL this receipt is for. A receipt admits one value into one slot. */
   readonly argName: string;
+  /**
+   * The argument SLOT, when the issuer can say - `to`, `recipients[0]`, `message.replyTo`.
+   *
+   * Supply it whenever a tool can carry two arguments with the same label. Without it the receipt
+   * matches by label, and a label that identifies more than one argument matches none of them. See
+   * docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly lifts: Taint;
   /** When it is good for, and where the value came from. */
   readonly scope: ReceiptScope;
@@ -250,6 +276,7 @@ export function admitEchoOfClean<T>(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: args.cleanValue,
@@ -273,8 +300,16 @@ export function admitCleanSelection<T>(args: {
   readonly collection: readonly T[];
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt is for. A receipt admits one value into one slot. */
+  /** The argument LABEL this receipt is for. A receipt admits one value into one slot. */
   readonly argName: string;
+  /**
+   * The argument SLOT, when the issuer can say - `to`, `recipients[0]`, `message.replyTo`.
+   *
+   * Supply it whenever a tool can carry two arguments with the same label. Without it the receipt
+   * matches by label, and a label that identifies more than one argument matches none of them. See
+   * docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly lifts: Taint;
   /** When it is good for, and where the value came from. */
   readonly scope: ReceiptScope;
@@ -289,6 +324,7 @@ export function admitCleanSelection<T>(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: element,
@@ -320,8 +356,16 @@ export function admitUserConfirmedValue(args: {
   readonly presented: string;
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt is for. A receipt admits one value into one slot. */
+  /** The argument LABEL this receipt is for. A receipt admits one value into one slot. */
   readonly argName: string;
+  /**
+   * The argument SLOT, when the issuer can say - `to`, `recipients[0]`, `message.replyTo`.
+   *
+   * Supply it whenever a tool can carry two arguments with the same label. Without it the receipt
+   * matches by label, and a label that identifies more than one argument matches none of them. See
+   * docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly lifts: Taint;
   /** When it is good for, and where the value came from. */
   readonly scope: ReceiptScope;
@@ -337,6 +381,7 @@ export function admitUserConfirmedValue(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: candidate,
@@ -429,6 +474,8 @@ export function admitAttestedToolOutput(args: {
   readonly capability: Capability;
   readonly role: ParamRole;
   readonly argName: string;
+  /** The argument SLOT, when the caller can say. Required where a label repeats. */
+  readonly argPath?: string;
   readonly lifts: Taint;
   readonly scope: ReceiptScope;
 }): Declassification<string> | undefined {
@@ -454,6 +501,7 @@ export function admitAttestedToolOutput(args: {
     capability: args.capability,
     role: args.role,
     argName: args.argName,
+    ...(args.argPath !== undefined ? { argPath: args.argPath } : {}),
     lifts: args.lifts,
     scope: args.scope,
     admitted: args.attestation.subject,
@@ -472,6 +520,8 @@ export function admitAttestedToolOutput(args: {
 /** One member of a confirmed combination. */
 export interface TupleEntry {
   readonly argName: string;
+  /** The argument SLOT, when the caller can say. Required where a label repeats. */
+  readonly argPath?: string;
   readonly value: string;
 }
 
@@ -511,15 +561,18 @@ export function admitConfirmedTuple(args: {
     if (!args.presented.includes(e.value)) return undefined;
     if (DECEPTIVE_RENDER.test(e.value)) return undefined;
   }
-  const sorted = [...args.entries].sort((a, b) => a.argName.localeCompare(b.argName));
+  // Sorted and keyed by SLOT, matching `tupleKey` in policy.ts exactly. A tuple receipt whose key
+  // came from labels would ratify "url+url" - a pair that names itself twice and identifies neither.
+  const slot = (e: TupleEntry): string => e.argPath ?? e.argName;
+  const sorted = [...args.entries].sort((a, b) => slot(a).localeCompare(slot(b)));
   return {
     id: nextId(),
     rule: "tuple_confirmed",
     capability: args.capability,
     role: args.role,
-    argName: sorted.map((e) => e.argName).join("+"),
+    argName: sorted.map(slot).join("+"),
     lifts: args.lifts,
-    admitted: sorted.map((e) => `${e.argName}=${e.value}`).join("&"),
+    admitted: sorted.map((e) => `${slot(e)}=${e.value}`).join("&"),
     // Cardinality 1 in the sense that one exact combination was ratified. NOT a singleton in the
     // echo_of_clean sense: the attacker chose what was proposed, the human only agreed to it.
     codomain: { kind: "human_ratified", cardinality: 1 },

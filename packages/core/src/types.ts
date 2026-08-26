@@ -482,6 +482,25 @@ export interface ActionArg {
    * a claim about a slot and its contents, and the check-versus-use gap closes.
    */
   readonly value?: string;
+  /**
+   * Where this argument lives in the tool call. The argument's IDENTITY.
+   *
+   * `name` is a LABEL and labels repeat. Two parameters can both be called `url`; an array of
+   * recipients is one name and many slots; a nested object has `message.to` and `message.replyTo`.
+   * Defect §11 was exactly this: a receipt bound by `(capability, role, argName)` admitted two
+   * arguments that shared a name, so one human approval of one URL silently covered a second,
+   * arbitrary one.
+   *
+   * Optional, and the default is safe rather than convenient. When it is absent the engine derives a
+   * slot from the name, and a name that occurs ONCE in an action is its own slot - which is the
+   * overwhelmingly common case and needs no ceremony. A name that occurs more than once is
+   * ambiguous, and a receipt that names only the label matches NOTHING. Fail closed: the caller who
+   * built two identically-named parameters is the one who knows which is which.
+   *
+   * Supply it as the canonical path your tool schema already uses - `to`, `recipients[0]`,
+   * `message.replyTo`. See docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly path?: string;
 }
 
 // NOTE: this interface used to carry `receipt?: ReceiptId`. It was dead - declared, exported, and

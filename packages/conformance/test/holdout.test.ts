@@ -207,14 +207,28 @@ describe("mutants", () => {
     //   M8 one_hop_only - both. v0 contains no provenance chain longer than one edge, so a defect
     //   that only appears on the second hop has nothing to bite on. Covered by holdout_v2 lau-h2-004.
     //
+    //   M9 argname_only_binding - a DATE, and the clearest example of one. The holdout was frozen
+    //   three versions before anyone knew that `(capability, role, argName)` was not an identity, so
+    //   it contains no action with two identically-labelled arguments and nothing there can bite
+    //   defect §11. Covered by tuning slot-t-001, whose paired control slot-t-002 must keep passing.
+    //
     // The distinction matters: one says the instrument missed something it was aiming at, the others
-    // say the instrument predates the thing being measured. Only the first is a defect. All three are
-    // closed elsewhere - M4 and M8 by holdout_v2, M7 by tuning - and none by editing v1.
+    // say the instrument predates the thing being measured. Only the first is a defect. All four are
+    // closed elsewhere - M4 and M8 by holdout_v2, M7 and M9 by tuning - and none by editing v1.
+    //
+    // This list GROWING is the expected shape of an honest frozen instrument. Every defect found
+    // after the freeze adds a mutant the freeze cannot see, and the alternative - editing v1 so it
+    // covers what we learned later - would destroy the only property it has.
     const blind = MUTANTS.filter((m) => m !== reference && biteCount(m, cases) === 0).map(
       (m) => m.name,
     );
     console.log("\nmutants the holdout does NOT discriminate:", blind, "\n");
-    expect(blind).toEqual(["M4 model_launders", "M7 receipt_bearer_token", "M8 one_hop_only"]);
+    expect(blind).toEqual([
+      "M4 model_launders",
+      "M7 receipt_bearer_token",
+      "M8 one_hop_only",
+      "M9 argname_only_binding",
+    ]);
   });
 
   it("the receipt mutant IS bitten by the tuning corpus, so the machinery is graded", () => {

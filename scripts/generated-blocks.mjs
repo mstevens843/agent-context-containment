@@ -1,0 +1,253 @@
+#!/usr/bin/env node
+// Numbers in prose, owned by the code that computes them.
+//
+// WHY THIS EXISTS. Stale numbers have recurred in FOUR separate passes of this project. `imported 6`
+// survived three versions after the split doubled to 34. A silent-attack table read 23/23 long after
+// it became 69/69. Test counts have been wrong repeatedly, in both directions. Each time it was
+// caught by a person reading carefully, and each time the fix was to retype the number - which is the
+// same act that produced the error.
+//
+// Prose has no type system. This is the type system.
+//
+//   node scripts/generated-blocks.mjs --check    verify every block matches its generator  (CI)
+//   node scripts/generated-blocks.mjs --write    regenerate every block
+//
+// A block looks like this, and the marker names the generator that owns it:
+//
+//   <!-- GENERATED:corpus-splits -->
+//   ...whatever the generator returns...
+//   <!-- /GENERATED -->
+//
+// WHAT IS DELIBERATELY NOT GENERATED. A number inside a sentence - "declaring a send tool as
+// read-only lets 17 of 17 imported attacks through" - reads as prose and would be wrecked by a block
+// marker around it. Those are protected differently: `claims.test.ts` requires each to name the
+// script that produces it, and `pnpm audit:claims` re-runs that script and compares. Blocks are for
+// TABLES; the claim registry is for SENTENCES. Both are needed because neither covers the other.
+
+import { readFileSync, writeFileSync } from "node:fs";
+import { classify } from "../packages/classifier/dist/index.js";
+import {
+  MUTANTS,
+  REVIEW_WORKFLOWS,
+  compareAll,
+  loadSplit,
+  referenceProfile,
+  runCorpus,
+  runWorkflow,
+} from "../packages/conformance/dist/index.js";
+
+const ROOT = new URL("..", import.meta.url).pathname;
+const CORPUS = `${ROOT}corpus/`;
+const NAMES = ["holdout", "holdout_v2", "tuning", "derived", "adaptive", "imported"];
+const splits = NAMES.map((split) => ({ split, cases: loadSplit(CORPUS + split, split) }));
+const baseline = { name: "ported production detector", classify };
+const all = splits.flatMap((s) => s.cases);
+
+const pad = (s, n) => String(s).padEnd(n);
+const frac = (a, b) => (b === 0 ? "  -  " : `${a}/${b}`);
+
+// ---- the generators ---------------------------------------------------------------------------
+// Each returns the exact text of one block. Keyed by the name in the marker.
+const GENERATORS = {
+  "domain-demos": () => {
+    // Which domains the demo set covers and what each one stops. Generated so that adding a domain
+    // updates the README, and so the framing claim - general infrastructure, payments as one domain
+    // among several - is a fact the code produces rather than a sentence somebody typed.
+    const results = REVIEW_WORKFLOWS.map(runWorkflow);
+    const lines = ["| domain | the attack it stops | safe steps kept |", "|---|---|---|"];
+    for (const r of results) {
+      const stopped = r.refused + r.stalled;
+      lines.push(
+        `| **${r.domain}** | ${r.title.toLowerCase()} | ${r.completed + r.reviewed} kept, ${stopped} stopped |`,
+      );
+    }
+    return lines.join("\n");
+  },
+
+  "corpus-splits": () => {
+    const kinds = {};
+    for (const c of all) kinds[c.source.kind] = (kinds[c.source.kind] ?? 0) + 1;
+    const lines = ["| split | n | | source kind | n |", "|---|---|---|---|---|"];
+    const kindRows = Object.entries(kinds).sort((a, b) => b[1] - a[1]);
+    splits.forEach((s, i) => {
+      const k = kindRows[i];
+      lines.push(
+        `| \`${s.split}\` | ${s.cases.length} | | ${k ? `\`${k[0]}\`` : ""} | ${k ? k[1] : ""} |`,
+      );
+    });
+    lines.push(`| **total** | **${all.length}** | | | |`);
+    return lines.join("\n");
+  },
+
+  "holdout-headline": () => {
+    // The four numbers a reader is most likely to quote, and until v1.0 the only headline table in
+    // the repository that was hand-typed and outside any block - the exact shape of the four prior
+    // staleness recurrences. It happened to be correct; nothing enforced that.
+    const h = splits.find((s) => s.split === "holdout");
+    const cmp = compareAll({ splits: [h], policy: referenceProfile, classifier: baseline });
+    const c = cmp.containment[0];
+    const k = cmp.classifier[0];
+    return [
+      "|  | containment | classifier |",
+      "|---|---|---|",
+      `| **attacks blocked** | **${frac(c.truePositives, c.attacks)}** | **${frac(k.truePositives, k.attacks)}** |`,
+      `| **benign allowed** | **${frac(c.trueNegatives, c.benign)}** | **${frac(k.trueNegatives, k.benign)}** |`,
+      `| **silent attacks blocked** (no injection wording) | **${frac(c.silentAttacksCaught, c.silentAttacks)}** | **${frac(k.silentAttacksCaught, k.silentAttacks)}** |`,
+      `| **benign quoted-attack cases over-blocked** | **${c.falsePositives}/${c.benign}** | **${k.falsePositives}/${k.benign}** |`,
+    ].join("\n");
+  },
+
+  "classifier-vs-containment": () => {
+    const cmp = compareAll({ splits, policy: referenceProfile, classifier: baseline });
+    const lines = [
+      "```",
+      "  CONTAINMENT                                    CLASSIFIER BASELINE",
+      "  split         n    blocked  allowed   escal    blocked  allowed   FN   FP",
+    ];
+    cmp.containment.forEach((c, i) => {
+      const k = cmp.classifier[i];
+      lines.push(
+        `  ${pad(c.split, 14)}${pad(c.n, 5)}${pad(frac(c.truePositives, c.attacks), 9)}${pad(frac(c.trueNegatives, c.benign), 10)}${pad(c.escalatedCorrectly, 9)}` +
+          `${pad(frac(k.truePositives, k.attacks), 9)}${pad(frac(k.trueNegatives, k.benign), 10)}${pad(k.falseNegatives, 5)}${k.falsePositives}`,
+      );
+    });
+    const silent = cmp.containment.reduce((n, c) => n + c.silentAttacks, 0);
+    const silentCaught = cmp.containment.reduce((n, c) => n + c.silentAttacksCaught, 0);
+    const silentClassifier = cmp.classifier.reduce((n, c) => n + c.silentAttacksCaught, 0);
+    const attacks = cmp.containment.reduce((n, c) => n + c.attacks, 0);
+    const benign = cmp.containment.reduce((n, c) => n + c.benign, 0);
+    const fp = cmp.containment.reduce((n, c) => n + c.falsePositives, 0);
+    const fn = cmp.containment.reduce((n, c) => n + c.falseNegatives, 0);
+    lines.push("");
+    lines.push("  SILENT ATTACKS - no injection wording for any text detector to find");
+    lines.push(
+      `  ${pad("", 14)}${pad(silent, 5)}${pad(frac(silentCaught, silent), 28)}${frac(silentClassifier, silent)}`,
+    );
+    lines.push("");
+    lines.push("  UTILITY - what survives the policy");
+    lines.push(`    over-blocked   ${fp}/${benign} benign cases refused`);
+    lines.push(`    under-blocked  ${fn}/${attacks} attacks allowed`);
+    lines.push("```");
+    return lines.join("\n");
+  },
+
+  "mutant-bite-matrix": () => {
+    const bites = (policy, cases) =>
+      runCorpus({ cases, policy, classifier: baseline }).results.filter((r) => {
+        if (r.outOfScope) return false;
+        if (r.groundTruth === "attack") return !r.containmentRefused;
+        return r.containmentRefused && r.escalatedAsExpected !== true;
+      }).length;
+    const lines = [
+      "```",
+      `  ${pad("mutant", 38)}${NAMES.map((n) => String(n.slice(0, 9)).padStart(11)).join("")}${"total".padStart(9)}`,
+    ];
+    for (const m of MUTANTS) {
+      const per = splits.map((s) => bites(m, s.cases));
+      lines.push(
+        `  ${pad(m.name, 38)}${per.map((n) => String(n).padStart(11)).join("")}${String(per.reduce((a, b) => a + b, 0)).padStart(9)}`,
+      );
+    }
+    lines.push("```");
+    return lines.join("\n");
+  },
+
+  "test-counts": () => {
+    // Read from the packages themselves rather than from a remembered figure.
+    const out = execSync("pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed'", {
+      cwd: ROOT,
+      encoding: "utf8",
+      shell: "/bin/bash",
+    });
+    const per = [...out.matchAll(/([a-z]+):test:\s+Tests\s+(\d+) passed/g)].map((m) => [
+      m[1],
+      Number(m[2]),
+    ]);
+    const total = per.reduce((n, [, c]) => n + c, 0);
+    const rows = per.sort((a, b) => b[1] - a[1]).map(([p, c]) => `| \`${p}\` | ${c} |`);
+    return ["| package | tests |", "|---|---|", ...rows, `| **total** | **${total}** |`].join("\n");
+  },
+};
+
+import { execSync } from "node:child_process";
+
+// ---- the files that carry blocks ---------------------------------------------------------------
+const FILES = ["README.md", "STATUS.md"];
+const OPEN = /<!-- GENERATED:([a-z0-9-]+) -->/g;
+
+const mode = process.argv.includes("--write") ? "write" : "check";
+let problems = 0;
+let blocks = 0;
+
+/**
+ * Blank out fenced code blocks before scanning for markers.
+ *
+ * Documenting the marker format is indistinguishable from using it, and the natural place to write
+ * the example is a fenced block. Without this, `docs/ADVERSARIAL_AUDIT.md` explaining what a marker
+ * looks like would be parsed as a marker naming a generator called "name" - which is exactly what
+ * happened the first time, on this script's second run, in a sentence in STATUS.md. Replaced with
+ * spaces rather than removed, so every reported offset still points at the right line.
+ */
+const outsideCode = (text) => text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
+
+for (const file of FILES) {
+  const path = ROOT + file;
+  let text = readFileSync(path, "utf8");
+  const found = [...outsideCode(text).matchAll(OPEN)];
+  for (const m of found) {
+    const name = m[1];
+    const gen = GENERATORS[name];
+    const startTag = `<!-- GENERATED:${name} -->`;
+    const endTag = "<!-- /GENERATED -->";
+    const from = text.indexOf(startTag);
+    const to = text.indexOf(endTag, from);
+    if (to === -1) {
+      console.error(`  ${file}: block "${name}" opens and never closes`);
+      problems++;
+      continue;
+    }
+    if (gen === undefined) {
+      console.error(
+        `  ${file}: block "${name}" names no generator. Known: ${Object.keys(GENERATORS).join(", ")}`,
+      );
+      problems++;
+      continue;
+    }
+    blocks++;
+    const current = text.slice(from + startTag.length, to).replace(/^\n|\n$/g, "");
+    const wanted = gen().replace(/^\n|\n$/g, "");
+    if (current === wanted) continue;
+
+    if (mode === "write") {
+      text = `${text.slice(0, from + startTag.length)}\n${wanted}\n${text.slice(to)}`;
+      writeFileSync(path, text);
+      console.log(`  ${file}: block "${name}" regenerated`);
+      continue;
+    }
+    problems++;
+    console.error(`\n  ${file}: block "${name}" is STALE.`);
+    const a = current.split("\n");
+    const b = wanted.split("\n");
+    const at = a.findIndex((l, i) => l !== b[i]);
+    console.error(`    first difference at line ${at + 1} of the block:`);
+    console.error(`      in the file:  ${a[at] ?? "(missing)"}`);
+    console.error(`      generated:    ${b[at] ?? "(missing)"}`);
+  }
+}
+
+if (mode === "write") {
+  console.log(`generated-blocks: ${blocks} block(s) checked.`);
+  process.exit(0);
+}
+if (problems === 0) {
+  console.log(`generated-blocks: OK - ${blocks} block(s) match their generators.`);
+  process.exit(0);
+}
+console.error("");
+console.error(
+  `  ${problems} problem(s). Run \`pnpm blocks:write\` and read the diff before committing:`,
+);
+console.error(
+  "  a changed number is either a real result or a regression, and the block cannot tell.",
+);
+process.exit(1);

@@ -13,11 +13,18 @@
     "wallet": "tsx wallet-assistant.ts",
     "rag:pipeline": "tsx rag-pipeline.ts",
     "playground": "tsx playground.ts",
-    "wallet:tuple": "tsx wallet-tuple.ts"
+    "wallet:tuple": "tsx wallet-tuple.ts",
+    "agents": "tsx agents/all.ts",
+    "agents:email": "tsx agents/email.ts",
+    "agents:devops": "tsx agents/devops.ts",
+    "agents:support": "tsx agents/support.ts",
+    "agents:payments": "tsx agents/payments.ts",
+    "agents:code": "tsx agents/code.ts"
   },
   "dependencies": {
     "@agent-containment/classifier": "workspace:*",
     "@agent-containment/core": "workspace:*",
+    "@agent-containment/ledger": "workspace:*",
     "@agent-containment/retrieval": "workspace:*"
   }
 }

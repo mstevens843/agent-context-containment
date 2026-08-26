@@ -1,5 +1,28 @@
 // The public API. A curated barrel, not `export *`: this list IS the surface, and anything not
 // named here is free to change without a major bump.
+//
+// ┌──────────────────────────────────────────────────────────────────────────────────────────────┐
+// │  READ THIS BEFORE CALLING `decide` DIRECTLY.                                                 │
+// │                                                                                              │
+// │  `decide` takes `now` and `spentReceipts` as OPTIONAL arguments. Omit them and you silently  │
+// │  get no expiry checking and unlimited receipt reuse: one human confirmation authorises a     │
+// │  retry loop, forever, and nothing warns you. Every test still passes.                        │
+// │                                                                                              │
+// │  This package cannot fix that. It reads no clock and holds no state - properties the design  │
+// │  rests on, enforced by `test/contract.test.ts` - and a pure function cannot own a ledger.    │
+// │                                                                                              │
+// │  So use the guard instead:                                                                   │
+// │                                                                                              │
+// │      import { createGuard } from "@agent-containment/ledger";                                │
+// │      const guard = createGuard({ clock: () => Date.now() });                                 │
+// │      guard.decide({ action, sources, receipts });                                            │
+// │                                                                                              │
+// │  Its input type declares both fields as `never`, so forgetting them is a COMPILE ERROR.      │
+// │                                                                                              │
+// │  Reach for the raw engine in three cases, all of which are about controlling time and the    │
+// │  ledger deliberately: writing a checker, replaying an audit log against a past policy, and   │
+// │  testing. Everywhere else it is the wrong tool. See docs/INTEGRATION.md.                     │
+// └──────────────────────────────────────────────────────────────────────────────────────────────┘
 
 export {
   // ---- identifiers
@@ -54,6 +77,7 @@ export {
   ALL_DECLASSIFICATION_RULES,
   CAPABILITY_POLICY,
   ceilingFor,
+  slotsOf,
   decide,
   decisionOf,
 } from "./policy.js";
@@ -116,3 +140,66 @@ export {
   isCorpusValid,
   tuningCaseId,
 } from "./corpus.js";
+
+// ---------------------------------------------------------------------------------------------
+// The advanced surface
+// ---------------------------------------------------------------------------------------------
+
+import type { DecisionInput, Verdict } from "./index.js";
+import { type CapabilityPolicy, decide as decideRaw } from "./policy.js";
+
+/**
+ * The raw engine, namespaced so that reaching for it is a visible act.
+ *
+ * `advanced.decide` is the same function as the top-level `decide`. Both are exported: the flat one
+ * because removing it would break every existing caller for no safety gain, and this one because
+ * `advanced.decide(...)` reads differently in a diff than `decide(...)` does. A reviewer skimming a
+ * pull request sees the word.
+ *
+ * That is the whole mechanism, and it is worth being honest about its size: this is a NAMING
+ * convention, not a barrier. Nothing stops anyone importing the flat export. What stops the
+ * *accident* is the guard's type, in `@agent-containment/ledger` - this only stops the accident
+ * being invisible.
+ *
+ * YOU ARE RESPONSIBLE FOR `now` AND `spentReceipts` when you call this. Omitting them is legal,
+ * silent, and disables replay and expiry protection entirely.
+ */
+export {
+  type Ingested,
+  IngestError,
+  contextOf,
+  derivedOutput,
+  fromDocument,
+  fromEmail,
+  fromExternalApi,
+  fromRetrieval,
+  fromSystem,
+  fromToolOutput,
+  fromUser,
+  fromWeb,
+  ingestionCoverage,
+} from "./ingest.js";
+
+export {
+  type ToolBinding,
+  type ToolRisk,
+  formatToolRisks,
+  semanticRisks,
+} from "./toolrisk.js";
+
+export {
+  type ManifestChange,
+  type ManifestFinding,
+  type ManifestSeverity,
+  contradictions,
+  diffPolicies,
+  formatManifestFindings,
+  formatPolicyDiff,
+  validatePolicy,
+} from "./manifest.js";
+
+export const advanced: {
+  readonly decide: (input: DecisionInput, policy?: CapabilityPolicy) => Verdict;
+} = {
+  decide: decideRaw,
+};

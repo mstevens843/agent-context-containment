@@ -228,7 +228,9 @@ describe("the tuple policy model is declarative", () => {
       (CAPABILITY_POLICY[k].tuplePolicies ?? []).map((t) => `${k}:${t.id}`),
     ).sort();
     expect(covered).toEqual([
-      "account_modify:target_and_setting",
+      // account_modify:target_and_setting was here and was DEAD - the row has no liftable rule, so
+      // nothing is ever admitted separately and the combination gate was never reached. Removed in
+      // v0.8; see docs/DEFECTS_FOUND.md §13. Restore it the day this row gains a liftable rule.
       "email_send:recipient_and_control",
       "file_write:path_and_mode",
       "payment:recipient_and_amount",
@@ -236,6 +238,21 @@ describe("the tuple policy model is declarative", () => {
       "transaction_broadcast:recipient_and_amount",
       "transaction_broadcast:recipient_and_asset",
     ]);
+  });
+
+  it("declares no combination on a row that can admit nothing separately", () => {
+    // The bottom-of-the-lattice counterpart to the test below, and the gap that let a dead tuple
+    // ship. The gate fires on values admitted SEPARATELY - each lifted by its own receipt, with the
+    // pair being the attack. A row whose `liftableBy` is empty admits nothing separately, so every
+    // tuple on it is unreachable however its ceilings are rated.
+    for (const k of ALL_CAPABILITIES) {
+      const row = CAPABILITY_POLICY[k];
+      if (row.liftableBy.size > 0) continue;
+      expect(
+        (row.tuplePolicies ?? []).map((t) => t.id),
+        `${k} has no liftable rule, so any tuple on it can never fire and reads as protection it does not give`,
+      ).toEqual([]);
+    }
   });
 
   it("declares no combination that could never fire", () => {

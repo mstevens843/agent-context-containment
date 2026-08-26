@@ -89,12 +89,15 @@ function mint(spec: CorpusReceiptSpec): ReceiptEvidence | undefined {
     capability: spec.capability,
     role: spec.role,
     argName: spec.argName,
+    // Carried through so a case can bind a receipt to a SLOT rather than a label. Omitted when the
+    // case does not say, which is the common and correct shape for an unambiguous label.
+    ...(spec.argPath !== undefined ? { argPath: spec.argPath } : {}),
     lifts: spec.lifts,
     // A fixed scope. Corpus cases are about the POLICY, and a per-case nonce or clock would make the
     // suite non-deterministic for no gain. Replay, expiry and source binding are exercised directly
     // in packages/core/test/replay.test.ts, where a caller-supplied clock and ledger belong.
     scope: {
-      nonce: `corpus-${spec.argName}`,
+      nonce: `corpus-${spec.argPath ?? spec.argName}`,
       issuedAt: 0,
       expiresAt: spec.expiresAt ?? null,
       source: spec.boundToSource !== undefined ? sourceId(spec.boundToSource) : null,

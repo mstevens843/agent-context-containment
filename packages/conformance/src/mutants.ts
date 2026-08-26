@@ -15,7 +15,7 @@
 // The house verb for a check that fires is "bites".
 
 import { detect } from "@agent-containment/classifier";
-import { CAPABILITY_POLICY, type CapabilityPolicy, decide } from "@agent-containment/core";
+import { CAPABILITY_POLICY, type CapabilityPolicy, decide, slotsOf } from "@agent-containment/core";
 import type { ContainmentPolicy, ContainmentRequest, ContainmentResponse } from "./ports.js";
 
 /** The real engine. Passes everything; the control at the other end. */
@@ -210,8 +210,24 @@ export const receiptBearerToken: ContainmentPolicy = {
     // defect, so it stopped being caught and the suite reported it as discriminated. Same failure as
     // M1's first version, and the same lesson: a mutant must contain its defect and NOTHING ELSE, or
     // an unrelated change quietly turns it into a pass.
+    // THE SECOND RESCUE, and the same lesson a third time. v0.8 closed defect §11 - one receipt now
+    // admits at most one argument per action - and that instantly neutralised this mutant, because
+    // every widened copy carried the SAME id: the engine admitted the first and refused the rest as
+    // already-consumed. The mutant stopped containing its defect and the suite reported it as
+    // discriminated.
+    //
+    // A bearer token is a receipt whose identity does not bind it to a slot, so each copy gets its
+    // own id. That is what an engine which matched on (capability, role) and never tracked per-action
+    // use would actually behave like, and it is the defect this mutant is for - not "reuses one id",
+    // which is now a different bug with its own guard.
     const names = r.action.args.map((a) => a.name);
-    const widened = r.receipts.flatMap((x) => names.map((argName) => ({ ...x, argName })));
+    const widened = r.receipts.flatMap((x, i) =>
+      names.map((argName, j) => ({
+        ...x,
+        argName,
+        id: `${String(x.id)}#bearer-${i}-${j}` as unknown as typeof x.id,
+      })),
+    );
     const v = decide({
       action: r.action,
       sources: r.sources,
@@ -255,6 +271,45 @@ export const oneHopOnly: ContainmentPolicy = {
 };
 
 /** Every mutant, plus the reference. */
+/**
+ * M9. Binds receipts by LABEL, which is what this engine did until v0.9.
+ *
+ * Models defect §11 exactly: `(capability, role, argName)` was believed to name one slot, and two
+ * arguments may share a name. The mutant restores that behaviour by rewriting each receipt to name
+ * the slot of every same-labelled argument, so one approval covers them all.
+ *
+ * WHY IT DISCRIMINATES rather than blanket-failing: an action whose argument labels are already
+ * unique gets slots equal to its labels, the rewrite is the identity, and the mutant answers exactly
+ * as the reference does. It can only differ where a label repeats - which is one corpus case,
+ * `slot-t-001`, and its paired control `slot-t-002` must still pass. A mutant that also broke the
+ * control would be proving the suite is a tripwire.
+ */
+export const argNameOnlyBinding: ContainmentPolicy = {
+  name: "M9 argname_only_binding",
+  decide: (r) => {
+    const slots = slotsOf(r.action.args);
+    const widened = r.receipts.flatMap((x) =>
+      r.action.args
+        .map((a, i) => ({ a, slot: slots[i] as string }))
+        .filter(({ a }) => a.name === x.argName)
+        // Each copy needs its own id, or v0.8's one-receipt-one-argument guard rejects the extras and
+        // rescues the mutant from its own defect - the failure recorded three times in §4 and §14.
+        .map(({ slot }, j) => ({
+          ...x,
+          argPath: slot,
+          id: `${String(x.id)}#label-${j}` as unknown as typeof x.id,
+        })),
+    );
+    const v = decide({
+      action: r.action,
+      sources: r.sources,
+      receipts: widened.length > 0 ? widened : r.receipts,
+      confirmed: r.confirmed,
+    });
+    return { decision: v.decision, reasons: v.reasons.map((x) => x.code) };
+  },
+};
+
 export const MUTANTS: readonly ContainmentPolicy[] = [
   reference,
   effectOnly,
@@ -265,4 +320,5 @@ export const MUTANTS: readonly ContainmentPolicy[] = [
   denylistInside,
   receiptBearerToken,
   oneHopOnly,
+  argNameOnlyBinding,
 ];

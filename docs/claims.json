@@ -1,0 +1,166 @@
+{
+  "about": "Every headline claim this project makes, and what would fail if it were false. Not every sentence - the load-bearing ones, the ones a reader would quote. Defect \u00a715 is why this file exists: two claims were graded PROVEN on evidence that did not support them, and nothing in the repository connected a claim to the test that was supposed to defend it.",
+  "grades": {
+    "PROVEN": "a test in this repository fails if this stops being true, AND a negative control shows the test can fail",
+    "ADAPTER-PROVEN": "the code is right; says nothing about any deployment or any database",
+    "SKIPPED": "not checked on a default run. Never reported as a pass",
+    "DELEGATED": "outside what the engine can see. The caller answers it",
+    "NOT-CLAIMED": "the arithmetic does not support it and no document asserts it",
+    "KNOWN-RISK": "measured, open, and named"
+  },
+  "rules": {
+    "everyClaimNeedsATest": "A claim with no `test` is a claim nobody is defending. PROVEN and ADAPTER-PROVEN require one.",
+    "provenNeedsANegativeControl": "A PROVEN claim needs something deliberately broken that the test rejects - a mutant, a fake, or a mutation entry. Otherwise it is \u00a715: a test that passes and could not fail.",
+    "numbersMustBeGenerated": "A numeric claim must name the script that produces it. `pnpm audit:claims` re-runs that script and compares. Four separate passes of this project shipped a stale hand-typed number.",
+    "notClaimedNeedsNoTest": "NOT-CLAIMED and DELEGATED claims are about what is NOT asserted. The prose guard defends those, not a unit test."
+  },
+  "claims": [
+    {
+      "id": "core-is-pure",
+      "claim": "The policy engine is pure: no imports, no clock, no randomness, nothing async.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/contract.test.ts",
+      "negativeControl": "mutation entry `core-purity`: adding a node:fs import to policy.ts must fail the contract test",
+      "mutation": "core-purity",
+      "note": "The import half of this check was VACUOUS from the day it was written until v1.0 - the stripper blanked string literals before the scan, so it matched nothing. See DEFECTS_FOUND.md \u00a716."
+    },
+    {
+      "id": "holdout-bytes-frozen",
+      "claim": "The 16 v0 holdout cases have not changed, byte for byte.",
+      "grade": "PROVEN",
+      "test": "scripts/verify-corpus.sh",
+      "generatedBy": "pnpm verify:corpus",
+      "negativeControl": "a formatter rewrote three files once and the manifest caught it - defect \u00a75"
+    },
+    {
+      "id": "imports-are-upstream-bytes",
+      "claim": "34 imported cases rebuild byte-identically from committed upstream source rows.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/import.test.ts",
+      "generatedBy": "pnpm import:check",
+      "negativeControl": "editing one imported string makes the rebuild diverge and the check exits 1"
+    },
+    {
+      "id": "receipt-binds-to-slot",
+      "claim": "A receipt admits one value, into one slot, once - and a label-only receipt matches nothing where the label repeats.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/argidentity.test.ts",
+      "negativeControl": "mutant M9 argname_only_binding, bitten by corpus slot-t-001 and nothing else",
+      "mutation": "slot-binding"
+    },
+    {
+      "id": "guard-redecides-on-lost-race",
+      "claim": "When the guard loses a receipt race it re-decides rather than returning the stale verdict.",
+      "grade": "PROVEN",
+      "test": "packages/ledger/test/durable.test.ts",
+      "negativeControl": "a store that reports unspent on read and already-taken on write",
+      "mutation": "guard-redecide",
+      "note": "Graded PROVEN in v0.9 on a test that could not fail. Deleting the branch left 74/74 passing. See DEFECTS_FOUND.md \u00a715."
+    },
+    {
+      "id": "manifests-self-consistent",
+      "claim": "Every capability table in this repository has zero structural contradictions.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/manifest.test.ts",
+      "generatedBy": "pnpm verify:manifests",
+      "negativeControl": "the tests construct contradictory manifests and assert each code fires"
+    },
+    {
+      "id": "mutants-discriminate",
+      "claim": "Every mutant is bitten somewhere and none is bitten everywhere; the reference is bitten by nothing.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/splits.test.ts",
+      "generatedBy": "pnpm report:mutants",
+      "negativeControl": "the bite matrix exits 1 if any mutant is bitten by nothing or by everything"
+    },
+    {
+      "id": "silent-attacks",
+      "claim": "69 of 69 silent attacks are contained; the classifier catches 0.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/splits.test.ts",
+      "generatedBy": "pnpm report",
+      "negativeControl": "the labelling convention test asserts no silent-labelled attack is flagged by classify()"
+    },
+    {
+      "id": "engine-knows-no-domain",
+      "claim": "The policy engine special-cases no business domain: no refund, ticket, deploy, kubernetes, invoice, solana or USDC anywhere in its code.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/demos.test.ts",
+      "negativeControl": "the test scans policy.ts source; adding the word fails it",
+      "note": "Stated precisely because the first version of this entry said \"no wallet\" - which is FALSE: `wallet` appears four times in policy.ts, because `wallet_sign` is a capability name, and it was never in the scanned word list. The claim is about the engine not branching on a DOMAIN, not about the absence of a substring. `wallet_sign` names a capability class - irreversible, full egress, nothing lifts it - and its BEHAVIOUR is domain-independent; only its name is not. Caught by an adversarial audit of this registry. See DEFECTS_FOUND.md \u00a717."
+    },
+    {
+      "id": "no-document-overstates",
+      "claim": "No document asserts a freeze proof, calls Postgres proven without its condition, implies a validated manifest is honest, claims the workflows prove judgement, or asserts optimality.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/claims.test.ts",
+      "negativeControl": "an injected false claim is demonstrably caught - see audit:docs"
+    },
+    {
+      "id": "postgres-concurrency",
+      "claim": "Concurrent reserve, cross-process replay refusal, restart durability, crash handling and bounded stale reclaim hold against a real Postgres.",
+      "grade": "PROVEN",
+      "test": "scripts/prove-postgres.mjs",
+      "generatedBy": "DATABASE_URL=... pnpm prove:postgres",
+      "negativeControl": "a read-then-write adapter in the same script must double-claim",
+      "note": "PROVEN only on a run with DATABASE_URL. Without it the whole block reports SKIPPED / NOT PROVEN."
+    },
+    {
+      "id": "async-protocol",
+      "claim": "The reserve/decide/consume-or-release protocol never spends a receipt behind a refusal.",
+      "grade": "ADAPTER-PROVEN",
+      "test": "packages/ledger/test/async.test.ts",
+      "negativeControl": "a read-then-write async adapter fails exactly one conformance scenario"
+    },
+    {
+      "id": "crosshost-sync",
+      "claim": "The sync cross-host claim is earned by passing five interleavings, not asserted.",
+      "grade": "ADAPTER-PROVEN",
+      "test": "packages/ledger/test/durable.test.ts",
+      "generatedBy": "pnpm prove:crosshost",
+      "negativeControl": "nonAtomicStore fails exactly the concurrent double-spend scenario"
+    },
+    {
+      "id": "postgres-without-url",
+      "claim": "Without DATABASE_URL the real-database proof reports SKIPPED / NOT PROVEN and exits 0.",
+      "grade": "SKIPPED",
+      "test": "packages/conformance/test/claims.test.ts",
+      "generatedBy": "pnpm prove:postgres"
+    },
+    {
+      "id": "hosts-share-one-database",
+      "claim": "Whether your hosts point at one database is a question the caller answers.",
+      "grade": "DELEGATED"
+    },
+    {
+      "id": "declaration-honesty",
+      "claim": "Whether a capability declaration is honest cannot be established from the declaration.",
+      "grade": "DELEGATED"
+    },
+    {
+      "id": "policy-optimality",
+      "claim": "No policy here is proven optimal. Five profiles, two undominated.",
+      "grade": "NOT-CLAIMED",
+      "generatedBy": "pnpm report:frontier"
+    },
+    {
+      "id": "freeze-ordering",
+      "claim": "That the holdout predates the engine is UNAVAILABLE, not pending.",
+      "grade": "NOT-CLAIMED",
+      "generatedBy": "pnpm verify:freeze"
+    },
+    {
+      "id": "misdeclaration-cost",
+      "claim": "A tool declared weaker than it is lets 9 of 17 direct-harm and 17 of 17 data-stealing imported attacks through.",
+      "grade": "KNOWN-RISK",
+      "test": "packages/conformance/test/mapping.test.ts",
+      "generatedBy": "pnpm report:mapping"
+    },
+    {
+      "id": "taint-is-cooperative",
+      "claim": "The taint wrapper is cooperative, not enforced. There is no membrane in JavaScript.",
+      "grade": "KNOWN-RISK",
+      "test": "packages/core/test/taint.test.ts"
+    }
+  ]
+}

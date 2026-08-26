@@ -24,6 +24,7 @@
 // docs/EVALS.md carries the exact command. A frozen holdout that merely SAYS it came first is
 // worth nothing.
 
+import { slotsOf } from "./policy.js";
 import type { Capability, ParamRole, ProposedAction, Provenance, Source, Taint } from "./types.js";
 
 declare const BRAND: unique symbol;
@@ -54,8 +55,16 @@ export const holdoutCaseId = (v: string): HoldoutCaseId => v as HoldoutCaseId;
  *   `holdout_v2` a second frozen split, closing the laundering gap v0 missed.  ids `-h2-`
  *   `adaptive`   evasion shapes an attacker would reach for once they know the design.  ids `-ad-`
  *   `generated`  every laundering transform applied to every base case, mechanically.  ids `-gen-`
+ *   `imported`   upstream case CONTENT, byte for byte, under its own licence.  ids `-imp-`
  */
-export type Split = "tuning" | "holdout" | "derived" | "holdout_v2" | "adaptive" | "generated";
+export type Split =
+  | "tuning"
+  | "holdout"
+  | "derived"
+  | "holdout_v2"
+  | "adaptive"
+  | "generated"
+  | "imported";
 
 /** Every split, for iteration. */
 export const ALL_SPLITS: readonly Split[] = [
@@ -65,6 +74,7 @@ export const ALL_SPLITS: readonly Split[] = [
   "derived",
   "adaptive",
   "generated",
+  "imported",
 ] as const;
 
 /** The id infix each split uses. A case whose id and split disagree is a corpus violation. */
@@ -75,6 +85,7 @@ export const SPLIT_INFIX: Readonly<Record<Split, string>> = {
   derived: "-d-",
   adaptive: "-ad-",
   generated: "-gen-",
+  imported: "-imp-",
 };
 
 /** The attack surface a case exercises. */
@@ -112,9 +123,40 @@ export type TextualMarkers =
   /** No injection language at all. Nothing to detect. */
   | "none";
 
-/** How a case entered the corpus. */
+/**
+ * How a case entered the corpus.
+ *
+ * `imported` and `derived` were one variant until v0.7, and collapsing them was a real mistake: an
+ * exact transcription of upstream's bytes and a hand-written restatement of upstream's *idea* are
+ * different grades of evidence, and the schema could not tell them apart. The `imported` split
+ * carried `kind: "derived"` - the same label the hand-derived split uses - so nothing but prose
+ * distinguished the strongest evidence in the repository from the second-strongest.
+ *
+ * They are separate variants now, `checkCorpus` enforces which split may use which, and an imported
+ * case must name the committed source fixture it was rebuilt from. That makes the exact-import claim
+ * mechanically checkable instead of a promise: `scripts/import-injecagent.mjs --check` recomposes the
+ * strings and fails the build if they ever drift.
+ */
 export type CaseSource =
   | { readonly kind: "original" }
+  | {
+      /**
+       * The bytes are upstream's, reproduced without alteration.
+       *
+       * The GRADING is still ours - provenance, capability, argument role and expected decision - and
+       * `modifications` must say so. Upstream has no provenance model and no capability table, so
+       * nothing in their data could supply those.
+       */
+      readonly kind: "imported";
+      readonly from: "agentdojo" | "injecagent";
+      readonly ref: string;
+      readonly license: "MIT";
+      /** The committed file the strings were composed from, under the split's `source/` directory. */
+      readonly sourceFixture: string;
+      /** Upstream commit the fixture was taken at. Pinned, so "which version" is never a guess. */
+      readonly upstreamCommit: string;
+      readonly modifications: string;
+    }
   | {
       readonly kind: "derived";
       readonly from: "agentdojo" | "injecagent";
@@ -154,8 +196,15 @@ export interface ExpectedOutcome {
  * describing what the human, or the allowlist, actually said.
  */
 export type CorpusReceiptSpec = {
-  /** The argument this receipt admits into. Must name a real argument of the proposed action. */
+  /** The argument LABEL this receipt admits into. Must name a real argument of the proposed action. */
   readonly argName: string;
+  /**
+   * The argument SLOT, for cases where a label identifies more than one argument.
+   *
+   * A case with two arguments called `url` needs this, or the receipt matches neither - which is
+   * correct behaviour and is itself worth a case. See docs/ARGUMENT_IDENTITY.md.
+   */
+  readonly argPath?: string;
   readonly capability: Capability;
   readonly role: ParamRole;
   readonly lifts: Taint;
@@ -292,7 +341,21 @@ export type CorpusViolationCode =
    * mismatched receipt - that is how you test that a confirmation for `email_send` grants nothing to
    * `payment` - and forbidding it would forbid the corpus's own anti-bearer-token cases.
    */
-  | "RECEIPT_CANNOT_MATCH_ITS_SLOT";
+  | "RECEIPT_CANNOT_MATCH_ITS_SLOT"
+  /**
+   * The exact/derived line, in both directions.
+   *
+   * An exact import filed as derived understates the strongest evidence here. A hand-derived case
+   * filed as an import claims bytes it does not have - and that direction is the one that would
+   * actually mislead a reader, so both are errors rather than warnings.
+   */
+  | "IMPORT_KIND_MISMATCH"
+  /** An exact import that does not name the committed fixture it rebuilds from. */
+  | "IMPORT_WITHOUT_FIXTURE"
+  /** An exact import that does not say which fields are the author's rather than upstream's. */
+  | "IMPORT_WITHOUT_GRADING_DISCLOSURE"
+  /** A hand-derived case that does not carry the HAND-DERIVED label. */
+  | "DERIVED_WITHOUT_HAND_DERIVED_LABEL";
 
 export interface CorpusViolation {
   readonly code: CorpusViolationCode;
@@ -408,8 +471,65 @@ export function checkCorpus(cases: readonly CorpusCase[]): CorpusViolation[] {
     }
 
     // ---- attribution ---------------------------------------------------------------------------
+    // A receipt naming a slot that does not exist is as broken as one naming a missing argument, and
+    // it is easier to get wrong: `url[2]` in a two-argument action looks plausible.
+    for (const r of c.receipts ?? []) {
+      if (r.argPath === undefined) continue;
+      const slots = slotsOf(c.proposedAction.args);
+      if (!slots.includes(r.argPath)) {
+        push(
+          "RECEIPT_FOR_UNKNOWN_ARG",
+          c.id,
+          `receipt names slot "${r.argPath}"; this action's slots are ${slots.join(", ")}`,
+        );
+      }
+    }
+
     if (c.source.kind === "derived" && c.source.modifications.trim() === "") {
       push("DERIVED_WITHOUT_ATTRIBUTION", c.id, "derived case with empty modifications");
+    }
+
+    // The exact/derived distinction, enforced rather than described. Both directions matter: an
+    // exact import filed as derived understates the evidence, and a hand-derived case filed as an
+    // import claims bytes it does not have - which is the direction that would actually mislead.
+    if (c.split === "imported" && c.source.kind !== "imported") {
+      push(
+        "IMPORT_KIND_MISMATCH",
+        c.id,
+        `lives in the imported split but is filed as "${c.source.kind}"; an exact import must say so`,
+      );
+    }
+    if (c.source.kind === "imported" && c.split !== "imported") {
+      push(
+        "IMPORT_KIND_MISMATCH",
+        c.id,
+        `claims kind "imported" from outside the imported split; exact upstream bytes belong in corpus/imported/`,
+      );
+    }
+    if (c.source.kind === "imported" && c.source.sourceFixture.trim() === "") {
+      push(
+        "IMPORT_WITHOUT_FIXTURE",
+        c.id,
+        "an exact import must name the committed fixture it is rebuilt from, or the claim is unverifiable",
+      );
+    }
+    if (c.source.kind === "imported" && !/OURS|NOT upstream/i.test(c.source.modifications)) {
+      push(
+        "IMPORT_WITHOUT_GRADING_DISCLOSURE",
+        c.id,
+        "an exact import must state which fields are OURS - upstream supplied no provenance model, capability or decision",
+      );
+    }
+    if (
+      c.split === "derived" &&
+      c.source.kind === "derived" &&
+      !/HAND-DERIVED/.test(c.source.modifications)
+    ) {
+      push(
+        "DERIVED_WITHOUT_HAND_DERIVED_LABEL",
+        c.id,
+        "a derived case must say HAND-DERIVED so it is never read as an exact import",
+      );
     }
 
     // ---- class agreement -----------------------------------------------------------------------

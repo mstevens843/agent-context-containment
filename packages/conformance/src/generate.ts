@@ -15,7 +15,11 @@
 // failure means something changed in the engine rather than in the dice.
 
 import type { CorpusCase, Provenance, Source, SourceId } from "@agent-containment/core";
-import { sourceId } from "@agent-containment/core";
+import { advanced, sourceId } from "@agent-containment/core";
+
+/** Local aliases, so the appended coverage code reads as a deliberate probe of the raw engine. */
+const advancedDecide = advanced.decide;
+const sourceIdOf = sourceId;
 
 /** One way to put distance between untrusted bytes and the argument they end up steering. */
 export interface LaunderingTransform {
@@ -165,4 +169,231 @@ export function generateAll(bases: readonly CorpusCase[]): CorpusCase[] {
     }
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Coverage-oriented generation
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * The transforms above are laundering: they add distance between untrusted bytes and an argument.
+ * That is one attack strategy, and it is the one *I* thought of, so a generator built only on it
+ * inherits my blind spots wholesale.
+ *
+ * This is a different strategy, and a better model of what a real attacker does. Nobody who has read
+ * the policy table bothers adding a fifth laundering hop - they read down the ceiling column looking
+ * for the row that admits the most, and aim there. So: enumerate EVERY (capability, role, provenance)
+ * triple, sort by how permissive the cell is, and attack the permissive ones directly.
+ *
+ * What it finds is not a new evasion. It is the cells nothing else in the corpus touches - the
+ * coverage gaps - and the report below names them whether or not any of them fail.
+ */
+
+import {
+  ALL_CAPABILITIES,
+  ALL_PARAM_ROLES,
+  ALL_PROVENANCES,
+  CAPABILITY_POLICY,
+  type Capability,
+  type ParamRole,
+  actionId,
+  ceilingFor,
+  taintAtMost,
+  taintOf,
+} from "@agent-containment/core";
+
+/**
+ * Roles that direct an action. The distinction the attack surface turns on.
+ *
+ * A permissive PAYLOAD on an acting capability is the design working: an untrusted mail body sent to
+ * a recipient the user chose is the ordinary use of an email assistant, and a policy that refused it
+ * would be removed. A permissive SINK_IDENTITY on the same capability is a hole.
+ *
+ * The first version of the probe below did not make this distinction and reported all 40 payload and
+ * selector cells as an attack surface. That is a false positive of exactly the kind that trains
+ * people to ignore a report.
+ */
+const STEERING: readonly ParamRole[] = ["sink_identity", "magnitude", "control"];
+
+/** One cell of the policy surface. */
+export interface CoverageCell {
+  readonly capability: Capability;
+  readonly role: ParamRole;
+  readonly provenance: Provenance;
+  /** The cell admits this provenance without a receipt. The ones worth attacking. */
+  readonly permissive: boolean;
+  /** This role directs the action rather than filling it. */
+  readonly steering: boolean;
+  readonly effect: string;
+  readonly egress: string;
+}
+
+/** Every cell of the surface, with whether it admits the provenance outright. */
+export function coverageCells(): CoverageCell[] {
+  const cells: CoverageCell[] = [];
+  for (const capability of ALL_CAPABILITIES) {
+    const row = CAPABILITY_POLICY[capability];
+    for (const role of ALL_PARAM_ROLES) {
+      for (const provenance of ALL_PROVENANCES) {
+        cells.push({
+          capability,
+          role,
+          provenance,
+          permissive: taintAtMost(taintOf(provenance), ceilingFor(row, role)),
+          steering: STEERING.includes(role),
+          effect: row.effect,
+          egress: row.egress,
+        });
+      }
+    }
+  }
+  return cells;
+}
+
+/**
+ * The cells an attacker would actually aim at: untrusted content admitted outright into a capability
+ * that does something or sends something.
+ *
+ * A permissive cell is not automatically a hole - `text_response` admits everything by design, and
+ * that row is the product. What makes a cell interesting is being permissive AND attached to a real
+ * effect or a real egress channel.
+ */
+export function attackSurface(): CoverageCell[] {
+  return coverageCells().filter(
+    (c) =>
+      c.permissive &&
+      c.steering &&
+      taintOf(c.provenance) === "UNTRUSTED_EXTERNAL" &&
+      (c.effect !== "none" || c.egress !== "none"),
+  );
+}
+
+/**
+ * Cells that admit untrusted content into a non-steering role of an acting capability.
+ *
+ * These are the RELEASE VALVES, not holes, and they are reported rather than filtered out. Every one
+ * of them is a place the design deliberately lets untrusted bytes through - a mail body, a file's
+ * contents, which record to open - because a policy that closed them would be unusable. Printing the
+ * count keeps that choice visible: if it ever grows, somebody widened something.
+ */
+export function releaseValves(): CoverageCell[] {
+  return coverageCells().filter(
+    (c) =>
+      c.permissive &&
+      !c.steering &&
+      taintOf(c.provenance) === "UNTRUSTED_EXTERNAL" &&
+      (c.effect !== "none" || c.egress !== "none"),
+  );
+}
+
+export interface ProbeResult {
+  readonly cell: CoverageCell;
+  readonly decision: string;
+  /** Untrusted content reached a capability that acts or leaks, and was allowed. */
+  readonly admitted: boolean;
+}
+
+/**
+ * Attack every cell of the surface directly and report what each one answered.
+ *
+ * Uses the raw engine deliberately: this is a probe of the POLICY, not an integration, so controlling
+ * the inputs exactly is the entire point - one of the three cases `docs/INTEGRATION.md` names as
+ * legitimate for the advanced API.
+ */
+export function probeSurface(cells: readonly CoverageCell[] = coverageCells()): ProbeResult[] {
+  return cells.map((cell) => {
+    const v = advancedDecide({
+      action: {
+        id: actionId(`probe-${cell.capability}-${cell.role}`),
+        capability: cell.capability,
+        tool: "probe",
+        args: [{ name: "arg", role: cell.role, derivedFrom: [sourceIdOf("probe")] }],
+      },
+      sources: [{ id: sourceIdOf("probe"), provenance: cell.provenance }],
+    });
+    const acts = cell.effect !== "none" || cell.egress !== "none";
+    return {
+      cell,
+      decision: v.decision,
+      // Only a STEERING role counts as admitted-to-an-acting-capability. A permissive payload is the
+      // release valve; a permissive sink is a hole. Conflating them produced 40 false positives.
+      admitted:
+        v.decision === "ALLOW" &&
+        acts &&
+        cell.steering &&
+        taintOf(cell.provenance) === "UNTRUSTED_EXTERNAL",
+    };
+  });
+}
+
+/** Which cells the hand-written corpus actually exercises. */
+export function coveredByCorpus(cases: readonly CorpusCase[]): Set<string> {
+  const seen = new Set<string>();
+  for (const c of cases) {
+    const byId = new Map(c.sources.map((s) => [s.id as string, s.provenance]));
+    for (const a of c.proposedAction.args) {
+      for (const from of a.derivedFrom) {
+        const p = byId.get(from as string);
+        if (p !== undefined) seen.add(`${c.proposedAction.capability}|${a.role}|${p}`);
+      }
+    }
+  }
+  return seen;
+}
+
+/** Render the coverage report. */
+export function formatCoverage(args: {
+  readonly probes: readonly ProbeResult[];
+  readonly covered: ReadonlySet<string>;
+}): string {
+  const rule = "=".repeat(86);
+  const surface = args.probes.filter((p) => p.cell.permissive);
+  const acting = args.probes.filter((p) => p.cell.effect !== "none" || p.cell.egress !== "none");
+  const admitted = args.probes.filter((p) => p.admitted);
+  const total = args.probes.length;
+  const hit = args.probes.filter((p) =>
+    args.covered.has(`${p.cell.capability}|${p.cell.role}|${p.cell.provenance}`),
+  ).length;
+
+  const lines = [
+    rule,
+    "policy-surface coverage - which cells the corpus actually attacks",
+    rule,
+    "",
+  ];
+  lines.push(`  cells on the surface                 ${total}`);
+  lines.push(`    of which act or leak               ${acting.length}`);
+  lines.push(`    of which admit their provenance    ${surface.length}`);
+  lines.push(`  cells exercised by the corpus        ${hit}/${total}`);
+  lines.push("");
+  const valves = releaseValves();
+  lines.push(`  RELEASE VALVES (by design): ${valves.length} cells admit untrusted content into a`);
+  lines.push(
+    "    non-steering role of an acting capability - a mail body, a file's contents, which",
+  );
+  lines.push(
+    "    record to open. These are the product, not holes. Counted so that widening one is",
+  );
+  lines.push("    visible.");
+  lines.push("");
+  lines.push(`  UNTRUSTED CONTENT STEERING AN ACTING CAPABILITY: ${admitted.length}`);
+  if (admitted.length === 0) {
+    lines.push("    none. No cell lets untrusted content DIRECT a capability with an effect or an");
+    lines.push("    egress channel without a receipt.");
+  } else {
+    for (const p of admitted) {
+      lines.push(`    ${p.cell.capability}.${p.cell.role} <- ${p.cell.provenance}`);
+    }
+  }
+  lines.push("");
+  lines.push(
+    "  Low corpus coverage of the full surface is EXPECTED and is not a defect: most cells",
+  );
+  lines.push(
+    "  are combinations nobody would build, like a magnitude on text_response. The number is",
+  );
+  lines.push("  printed so the gap is visible rather than assumed, and so a newly-permissive cell");
+  lines.push("  shows up as an unattacked one before it shows up as an incident.");
+  lines.push(rule);
+  return lines.join("\n");
 }

@@ -37,7 +37,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
+    "@agent-containment/classifier": "workspace:*",
     "@agent-containment/core": "workspace:*",
-    "@agent-containment/classifier": "workspace:*"
+    "@agent-containment/ledger": "workspace:*"
   }
 }

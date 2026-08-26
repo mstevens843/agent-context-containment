@@ -295,9 +295,83 @@ answer is not in the room. That is structural rather than a rule, and it exists 
 benchmark this project grew out of, two of three discovered verifier bypasses were engines reading or
 rewriting the ground truth they were graded against.
 
+## Three things added in v0.6, all of them ways of doubting the numbers above
+
+### Rival policy profiles (`pnpm report:profiles`)
+
+Every comparison before this one was against something worse: mutants are wrong on purpose, the
+classifier is a technique this project argues against. Both are fair, and both are rigged the same
+way — the shipped table was the only entrant nobody tried to make lose.
+
+So `strict` and `permissive` are not mutants. They are the tables a different deployment would
+actually configure, and every split runs against all three plus the classifier. **The purpose is not
+to make `reference` look best.** `strict` blocks more attacks than the reference does; it was built
+to, and the column that prices it is over-block.
+
+`reference` scoring 0 over-block and 0 under-block on every split is reported by the tool itself as a
+**corpus fact rather than a result** — computed, not written down, so the caveat disappears on its own
+the day a case finally costs the shipped policy something. Until then, its position on the
+safety/utility curve is *unmeasured*, not optimal.
+
+A test asserts the report cannot pool: the cell count must equal profiles × splits, and every numeric
+row must name exactly one split. An aggregate row would be one `.reduce` away otherwise.
+
+### The adversarial planner (`pnpm report:planner`)
+
+Hand-written adversarial tests have one defect that care cannot fix: you must already suspect a
+failure mode to write a test for it, and the suspicion comes from the same head as the defence. The
+planner trades authorship for enumeration — six plan shapes crossed with every acting capability, 48
+runs, including two that nobody writes by hand: a **genuine receipt presented for the wrong slot**,
+and a **genuinely signed value used for the wrong purpose**.
+
+48/48 correct is not the interesting part. The interesting parts are:
+
+- the first run scored **5/8 on the *safe* shape**, and the three failures were not defects —
+  `wallet_sign`, `transaction_broadcast` and `account_modify` hold `sink_identity` at `CLEAN`, so they
+  refuse a destination typed into a conversation. The *expectation* was wrong. A chat message is a
+  fine place to say "pay the landlord" and a bad place to learn an account number, because the user
+  pasting one is itself an injection path. The shape now draws from an allowlist for those rows and
+  the report prints the usability cost: **3 of 8 acting capabilities will not take a destination from
+  conversation at all.**
+- discrimination is asserted, not assumed. Pointed at a taint-blind table the three flow shapes
+  collapse and the `safe` shape does not — a mutant that fails everything would prove the suite is a
+  tripwire rather than a measurement.
+
+Reported **apart from** the five hand-written agent runs, always. Those five are realistic and few;
+these are unrealistic and many, and one number over both would let the generated count lend
+credibility to the runs a reader might actually read.
+
+### The optional model judge (`pnpm judge:model`)
+
+**Off by default, never runs in CI, and gates nothing.** No key: it prints `skipped` and exits 0, so a
+pipeline can call it unconditionally. With `CI=true` it refuses even when a key is present, unless
+`MODEL_JUDGE_ALLOW_CI=1`.
+
+What it judges is **the ground-truth labels, not the engine**. The engine is deterministic and needs
+no model; what it cannot check is whether the labels it is graded against are defensible to anyone but
+their author. A corpus with wrong labels scores an engine perfectly while measuring nothing.
+
+**Model-judged results are supplementary and are never a source of truth.** A model asked the same
+question twice can answer differently, and a number that moves on its own cannot sit beside numbers
+that do not. Nothing it produces enters the split tables. If the script were deleted, every headline
+figure in this repository would be unchanged. Sampling is a deterministic stride over id-sorted cases,
+because a supplementary result that cannot be reproduced is a rumour.
+
 ## What this eval does not claim
 
 See [LIMITATIONS.md](LIMITATIONS.md). In short: n=16 holdout is not a benchmark; provenance labels are
 handed over for free and deriving them is the hard part; there is no adaptive attacker; the baseline
 is a regex heuristic and the bias runs toward containment; and containment's holdout result is partly
 structural by construction.
+
+Two more, added because v0.6 measured them rather than leaving them as prose:
+
+- **The capability declaration is trusted input, and it is worth 4 of 6 imported cases.** Declare an
+  exfiltration tool as `read_only_tool` and containment lets it through, because it enforces flow
+  *given* the declaration and cannot know the declaration is wrong. Not scored as a containment
+  failure — it is out of contract — but reported, because it is the first thing to audit in a real
+  deployment.
+- **The grading of the imported split is mine even though the strings are not.** `6/6` hold under
+  every peer capability mapping a reviewer could defend, which is the condition under which those
+  cases are evidence about the attacks rather than about my table. That is a measured claim now, not
+  an assurance.

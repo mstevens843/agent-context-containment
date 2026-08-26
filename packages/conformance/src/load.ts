@@ -13,11 +13,23 @@ import {
   formatCorpusViolations,
 } from "@agent-containment/core";
 
+/**
+ * Files that live in a split directory but are not cases.
+ *
+ * This is an explicit list rather than a heuristic on purpose. A rule like "skip anything that does
+ * not parse as an array" would also skip a genuinely malformed case file, which is exactly the
+ * failure this loader exists to make loud. Adding a name here has to be a deliberate act.
+ */
+const SIDECARS: ReadonlySet<string> = new Set([
+  "FREEZE.json", // the holdout's freeze claim and its failed-attempt record
+  "MANIFEST.sha256", // byte hashes, not JSON at all
+  "MAPPING.json", // the grading audit for corpus/imported - see packages/conformance/src/mapping.ts
+  "MAPPING_DS.json", // the same, for InjecAgent's data-stealing half (v0.8)
+]);
+
 /** Read every case in one split directory. Throws if the corpus is invalid: a bad corpus grades nothing. */
 export function loadSplit(dir: string, split: Split): CorpusCase[] {
-  const files = readdirSync(dir).filter(
-    (f) => f.endsWith(".json") && f !== "FREEZE.json" && f !== "MANIFEST.sha256",
-  );
+  const files = readdirSync(dir).filter((f) => f.endsWith(".json") && !SIDECARS.has(f));
   const cases: CorpusCase[] = [];
   for (const f of files.sort()) {
     const parsed: unknown = JSON.parse(readFileSync(join(dir, f), "utf8"));
