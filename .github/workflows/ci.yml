@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # The frozen holdout grades the policy engine, so its integrity is checked before anything else
+  # runs. Its own job, not a step inside build-test: this needs no dependencies and no toolchain, so
+  # it fails in seconds rather than after an install and a build, and a red X here says "the corpus
+  # drifted" rather than "something in CI broke".
+  #
+  # Do not fold this into `pnpm test`. A drift check buried inside a test command is a drift check
+  # nobody sees the name of when it fails.
+  corpus-integrity:
+    name: Frozen holdout integrity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify holdout matches MANIFEST.sha256
+        run: shasum -a 256 -c corpus/holdout/MANIFEST.sha256
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::The frozen holdout no longer matches its manifest."
+          echo "The holdout is the instrument that grades the policy engine."
+          echo "Do NOT regenerate the manifest to make this pass - find out what wrote to the file."
+          echo "See docs/DEFECTS_FOUND.md section 5 and scripts/verify-corpus.sh."
+
+  build-test:
+    name: Lint, typecheck, build, test
+    runs-on: ubuntu-latest
+    needs: corpus-integrity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test

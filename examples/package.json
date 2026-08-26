@@ -1,0 +1,19 @@
+{
+  "name": "@agent-containment/examples",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Runnable examples. Private and never published; each one prints a decision and its reasons.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "type": "module",
+  "scripts": {
+    "web": "tsx web-research-agent.ts",
+    "email": "tsx email-assistant.ts",
+    "rag": "tsx rag-assistant.ts"
+  },
+  "dependencies": {
+    "@agent-containment/classifier": "workspace:*",
+    "@agent-containment/core": "workspace:*",
+    "@agent-containment/retrieval": "workspace:*"
+  }
+}

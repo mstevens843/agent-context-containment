@@ -1,0 +1,35 @@
+{
+  "name": "agent-context-containment-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Containment instead of classification for prompt injection: provenance tainting, capability-scoped tools, an attack corpus, and an eval harness that scores an honest classifier baseline against it.",
+  "license": "MIT",
+  "author": "Mathew Stevens",
+  "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "lint": "biome check .",
+    "verify:corpus": "bash scripts/verify-corpus.sh",
+    "lint:fix": "biome check --fix --unsafe .",
+    "format": "biome format --write .",
+    "clean": "turbo run clean && rm -rf node_modules",
+    "changeset": "changeset",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@changesets/cli": "^2.27.9",
+    "@types/node": "^20.16.13",
+    "tsup": "^8.3.0",
+    "tsx": "^4.19.2",
+    "turbo": "^2.2.3",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.4"
+  }
+}
