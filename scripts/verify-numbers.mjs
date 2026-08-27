@@ -25,6 +25,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { loadSplit } from "../packages/conformance/dist/index.js";
 import { scanDocument } from "./lib/numeric-noise.mjs";
+import { stripAnsi } from "./lib/strip-ansi.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 
@@ -120,7 +121,15 @@ const FAST = process.argv.includes("--fast");
 // exist: the refusal below has to be watched firing, and the alternative was a test that copies or
 // rewrites this shipped script. CI does not set it, and the command it defaults to is what ships.
 const TEST_CMD = process.env.CONTAINMENT_TEST_CMD ?? "TURBO_FORCE=true pnpm -s test 2>&1";
-const testRun = FAST ? { ok: true, out: "" } : runStatus(TEST_CMD);
+const testRunRaw = FAST ? { ok: true, out: "" } : runStatus(TEST_CMD);
+// STRIP COLOUR BEFORE MATCHING ANYTHING, and this single line is the whole of defect section 43.
+//
+// Vitest turns colour OFF when piped - a developer's machine - and FORCES it ON under `CI=true`, so
+// the summary a human reads as `Tests  348 passed (348)` arrives here as
+// `ESC[2m      Tests ESC[22m ESC[1mESC[32m348 passedESC[39m...`. Neither the pass counter NOR the
+// red-suite detector below can cross those escapes, so in CI this script saw a green suite with zero
+// tests AND could not have noticed a red one. It matched locally every single time.
+const testRun = { ok: testRunRaw.ok, out: stripAnsi(testRunRaw.out) };
 const testFailed =
   !FAST &&
   (!testRun.ok || /Tests\s+\d+\s+failed/.test(testRun.out) || /\bfailed\s*\|/.test(testRun.out));

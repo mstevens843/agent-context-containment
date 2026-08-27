@@ -2718,7 +2718,7 @@ result and this is an anecdote generator.
 **Deployment topology is untouched**, as it must be. The deployer-runnable check added in section 41
 is still the only answer to it.
 
-## 43. The number checker blamed three documents for a turbo cache hit
+## 43. The number checker could not read a coloured test summary, and blamed three documents for it
 
 CI failed on `pnpm verify:numbers` with three stale-number findings:
 
@@ -2732,19 +2732,38 @@ CI failed on `pnpm verify:numbers` with three stale-number findings:
 **Every one of those documents was correct.** The suite was green, 711 tests passed, and the number
 in the documents was right. What produced `0` was the checker.
 
-### The mechanism
+### The mechanism, and the first diagnosis of it was wrong
 
-Counting tests means running the suite and reading the per-package `Tests N passed` summaries out of
-its output. In the `claim-gates` job, `pnpm blocks:check` runs the suite two steps before
-`verify:numbers` does — so by the time the counting run happens, **turbo has a full cache hit**.
-Locally turbo replays the cached task logs and the summaries are there. In CI it replayed nothing:
-a `FULL TURBO` banner and no task output.
+**Vitest disables colour when its output is piped and FORCES it on under `CI=true`,** so the log looks
+right in the GitHub Actions UI. The summary a human reads as
 
-`matchAll` then found no summaries, `reduce` summed them to **0**, and — because the suite had
-exited 0 — nothing looked wrong. The green-suite path had no idea it had counted nothing.
+```
+Tests  348 passed (348)
+```
 
-Reproduced locally by suppressing the replay: `pnpm -s test --output-logs=none` yields zero summary
-matches on a warm cache, and the script reports every correct test count in the repository as stale.
+actually arrives as `ESC[2m      Tests ESC[22m ESC[1mESC[32m348 passedESC[39m…`, and
+`/Tests\s+(\d+) passed/` cannot cross those escapes. It matched on every local run — where colour is
+off — and could never match in CI.
+
+`matchAll` found nothing, `reduce` summed it to **0**, and because the suite had exited 0 nothing
+looked wrong.
+
+**Worse: the same escapes defeat the RED-suite detector.** `/Tests\s+\d+\s+failed/` and
+`/\bfailed\s*\|/` both fail on coloured output, so the section 35 refusal — the one added precisely
+so a red suite could never be counted — **has never worked in CI at all.** A failing suite there would
+also have reported zero tests and blamed the documents.
+
+**The first attempt at this section blamed a turbo cache hit and was wrong.** The reasoning was that
+`blocks:check` runs the suite two steps earlier, so the counting run is a full cache hit that replays
+no logs. That hazard is real and is now guarded with `TURBO_FORCE=true`, but it was not what broke CI:
+reproducing with `CI=true` locally shows turbo running the suite fresh and printing every summary —
+in colour, unreadable. The fix shipped for it made the error message honest and left the job red,
+which is how the second CI run produced the refusal instead of the false stale-number report.
+
+The tell was there in the tree the whole time: **`scripts/generated-blocks.mjs` already had a private
+`stripAnsi` and `scripts/verify-numbers.mjs` did not.** One file could read a CI test summary and the
+other could not. That is the entire defect, and a private copy of a utility is precisely the place for
+two files to disagree.
 
 ### It is section 35, in a new costume, in the same three lines
 
@@ -2760,20 +2779,36 @@ the documents were stale and recommended editing them.
 
 ### Two fixes, and the second matters more
 
-**`TURBO_FORCE=true` on the counting run.** Forcing execution means the summaries are always present,
-whatever the cache state. Applied in `verify-numbers.mjs`, and in `generated-blocks.mjs` for the same
-reason: that file already *throws* when it cannot parse, so its failure was loud rather than wrong —
-but it only stayed loud because `blocks:check` happens to run before anything warms the cache. An
-invisible ordering dependency is not a defence.
+**One shared `stripAnsi`, in `scripts/lib/`, used by both counters.** The output is stripped before
+anything is matched against it, so the pass counter and the red-suite detector both work in either
+environment. It is shared rather than copied because the copy is what caused this, and a test asserts
+both callers import it and that neither re-grows a private one.
+
+**`TURBO_FORCE=true` on the counting run**, kept although it was not the cause. A cache hit that
+replays no logs is a real second way to have nothing to count, and forcing execution removes an
+invisible dependency on `blocks:check` happening to run first.
 
 **A green suite that printed no summary now REFUSES.** Registering the sum of nothing is registering
 `0`, and `0` is a placeholder nobody stands behind — the exact thing this script's own rule forbids:
 *a fact that cannot be computed leaves the list.* It exits 2 and says the harness is at fault and no
 document is, so this class of failure can never again be read as stale documentation.
 
-### The lesson, which is not a new one
+### The lesson, and it cost several passes to learn
 
-The previous pass added a refusal for the failure mode it had just been burned by, and did not ask
-what *else* could make the count unreadable. **A guard written against one cause of a wrong number is
-not a guard against wrong numbers.** The check that finally holds is the one on the OUTPUT — "did I
-parse anything at all?" — rather than on any particular way of failing to.
+Three separate readings of this failure — two automated, one mine — concluded the documents were
+stale and recommended editing them. **They were all wrong, and following any of them would have made
+the documents false while turning CI green.** The checker's error message was confident, precise, and
+pointing at the wrong file.
+
+Two things made it survive:
+
+- **It only reproduced in CI.** Every local run was green, because colour is off when piped. Nothing
+  about "run it locally and see" could ever have found it. The fix was found by setting `CI=true` and
+  running the same command — one environment variable, and the bug was immediate.
+- **A guard written against one cause of a wrong number is not a guard against wrong numbers.**
+  Section 35 refused on a red suite. This pass's first fix refused on an empty one. Neither asked the
+  question the OUTPUT answers: *did I parse anything at all, and if not, why?*
+
+The refusal added on the way through is still worth having — it converted a confident wrong answer
+into an accurate complaint — but a refusal is not a fix. It is what a check does when it has stopped
+being able to do its job, and CI stays red until somebody does the job.

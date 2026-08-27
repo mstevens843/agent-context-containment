@@ -270,7 +270,7 @@ engine. The benign column is the only thing that tells them apart.
 
 | | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 | v1.0.1 |
 |---|---|---|---|---|---|---|
-| tests | 263 | 304 | 361 | 414 | 534 | **716** |
+| tests | 263 | 304 | 361 | 414 | 534 | **721** |
 | hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **130** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 | 7 |
 | non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | **62** |
@@ -339,22 +339,22 @@ Counted, not remembered — these were stale for four versions before v0.6.
 | | |
 |---|---|
 | Source LOC | **13,833** across 5 packages |
-| Test LOC | **12,588** across 51 files |
+| Test LOC | **12,651** across 51 files |
 | Example LOC | **1,843** across 15 files |
-| Script LOC | **4,913** — 21 report/proof/import scripts, 6 shell |
-| Total TypeScript | **28,264** |
-| Docs (docs/) | **6,527 lines** across 24 files |
+| Script LOC | **4,977** — 22 report/proof/import scripts, 6 shell |
+| Total TypeScript | **28,327** |
+| Docs (docs/) | **6,562 lines** across 24 files |
 <!-- /GENERATED -->
 
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
-| `conformance` | 348 |
+| `conformance` | 353 |
 | `core` | 266 |
 | `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **716** |
+| **total** | **721** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -506,7 +506,7 @@ alone has never counted in this repository.
 | exact imports, 62 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
 | lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 716** (534 before this pass) |
+| test | **PASS — 721** (534 before this pass) |
 | `decide()` is total: no input throws, every malformed one is denied | **PASS**, explicit shapes plus a seeded sweep |
 | a provenance DAG resolves by path, and a cycle still fails closed | **PASS**, diamond and cycle pinned separately |
 | an unrecognised parameter role admits clean input only | **PASS**, and it could ALLOW before |

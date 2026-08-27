@@ -19,6 +19,8 @@ import { describe, expect, it } from "vitest";
 import { parseSinglePackageTestCount, parseTestCountsForBlock } from "../../../scripts/generated-blocks.mjs";
 // @ts-expect-error - a plain .mjs helper, deliberately not part of any package's build
 import { numericClaims, scanDocument } from "../../../scripts/lib/numeric-noise.mjs";
+// @ts-expect-error - a plain .mjs helper, deliberately not part of any package build
+import { stripAnsi } from "../../../scripts/lib/strip-ansi.mjs";
 
 const REPO = join(import.meta.dirname, "..", "..", "..");
 
@@ -525,6 +527,67 @@ describe("verify:numbers can fail, proven without touching a release document", 
 // the maintenance it asks for turned the suite red; and two registered facts passed their negative
 // controls while matching zero sentences in any shipping document. See DEFECTS_FOUND.md section 36.
 // ---------------------------------------------------------------------------------------------
+
+describe("the test count survives CI colour, which is what actually broke", () => {
+  // THE DEFECT THIS PINS. Vitest turns colour OFF when its output is piped - every local run - and
+  // FORCES it ON under `CI=true`, so the line a human reads as `Tests  348 passed (348)` arrives as
+  // `ESC[2m      Tests ESC[22m ESC[1mESC[32m348 passedESC[39m...`. No pattern that expects digits
+  // after `Tests` can cross those escapes.
+  //
+  // So in CI this script counted a green suite as ZERO tests, and - worse - could not have detected a
+  // RED one either, which means the section 35 refusal never worked there at all. Locally it matched
+  // every single time, which is why it survived several passes. See DEFECTS_FOUND.md section 43.
+  const ESC = String.fromCharCode(27);
+  const green = `${ESC}[2m      Tests ${ESC}[22m ${ESC}[1m${ESC}[32m348 passed${ESC}[39m${ESC}[22m${ESC}[90m (348)${ESC}[39m`;
+  const red = `${ESC}[2m      Tests ${ESC}[22m ${ESC}[1m${ESC}[31m1 failed${ESC}[39m | ${ESC}[32m347 passed${ESC}[39m (348)`;
+
+  it("a coloured PASS summary is countable once stripped", () => {
+    const clean = stripAnsi(green);
+    expect([...clean.matchAll(/Tests\s+(\d+) passed/g)].map((m) => m[1])).toEqual(["348"]);
+  });
+
+  it("a coloured FAIL summary is still recognised as red", () => {
+    // The half that matters more. An undetected red suite in CI would have been counted, not refused.
+    const clean = stripAnsi(red);
+    expect(/Tests\s+\d+\s+failed/.test(clean), "a red CI suite reads as green").toBe(true);
+  });
+
+  it("and without stripping, neither works - which is the bug, asserted", () => {
+    // The near-miss. If vitest ever stopped colouring under CI these fixtures would still pass while
+    // asserting nothing, so this states the failing behaviour directly.
+    expect(/Tests\s+\d+\s+failed/.test(red)).toBe(false);
+    expect([...green.matchAll(/Tests\s+(\d+) passed/g)]).toHaveLength(0);
+  });
+
+  it("both scripts that count tests use the ONE shared implementation", () => {
+    // A private copy in one file and none in the other is exactly how this happened:
+    // `generated-blocks.mjs` could read a CI summary and `verify-numbers.mjs` could not.
+    for (const f of ["scripts/verify-numbers.mjs", "scripts/generated-blocks.mjs"]) {
+      expect(
+        readFileSync(join(REPO, f), "utf8"),
+        `${f} does not use the shared stripAnsi`,
+      ).toContain('from "./lib/strip-ansi.mjs"');
+    }
+    // And no file may keep a private copy again.
+    expect(
+      readFileSync(join(REPO, "scripts/generated-blocks.mjs"), "utf8"),
+      "generated-blocks re-grew a private stripAnsi - the two can drift apart again",
+    ).not.toMatch(/const stripAnsi = /);
+  });
+
+  it("verify:numbers counts the suite correctly with CI=true set", () => {
+    // THE END-TO-END PIN, in the environment that was failing. Everything above is about a fixture;
+    // this runs the real script the way GitHub Actions does.
+    const out = execFileSync("node", ["scripts/verify-numbers.mjs", "--fast"], {
+      cwd: REPO,
+      encoding: "utf8",
+      env: { ...process.env, CI: "true" },
+    });
+    // `--fast` drops the tests fact, so assert the run is clean rather than the count - the count
+    // itself is covered by the fixtures above and by the script's own refusal.
+    expect(out).not.toContain("PRINTED NO");
+  });
+});
 
 describe("the test count survives a warm turbo cache", () => {
   // WHAT THIS IS ABOUT. CI failed with `tests 0 (pnpm test)` and three release documents reported

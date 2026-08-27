@@ -39,6 +39,9 @@ import {
   runWorkflow,
   sensitivity,
 } from "../packages/conformance/dist/index.js";
+// ONE implementation, shared with verify-numbers.mjs. A private copy here and none there is exactly
+// how defect section 43 happened: this file could read a CI test summary and that one could not.
+import { stripAnsi } from "./lib/strip-ansi.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname;
 const CORPUS = `${ROOT}corpus/`;
@@ -49,21 +52,6 @@ const all = splits.flatMap((s) => s.cases);
 
 const pad = (s, n) => String(s).padEnd(n);
 const frac = (a, b) => (b === 0 ? "  -  " : `${a}/${b}`);
-const stripAnsi = (s) => {
-  let out = "";
-  for (let i = 0; i < s.length; i++) {
-    if (s.charCodeAt(i) === 27 && s[i + 1] === "[") {
-      let j = i + 2;
-      while (j < s.length && ((s[j] >= "0" && s[j] <= "9") || s[j] === ";")) j++;
-      if (s[j] === "m") {
-        i = j;
-        continue;
-      }
-    }
-    out += s[i];
-  }
-  return out;
-};
 
 const testOutputTail = (out) => stripAnsi(out).split("\n").slice(-40).join("\n").trim();
 
