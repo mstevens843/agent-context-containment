@@ -10,13 +10,14 @@
 //   node scripts/report.mjs              human-readable, to stdout
 //   node scripts/report.mjs --markdown   markdown, to stdout
 //   node scripts/report.mjs --out FILE   markdown, to a file
+//   node scripts/report.mjs --check      fail if docs/REPORT.md is stale, and say where
 //
 // WHAT THIS DELIBERATELY DOES NOT DO: produce a headline. There is no total, no score, and no "best"
 // anything. Every table below is per split or per profile, because the splits are not samples from
 // one population and the profiles are not competitors. A single number over them would be the most
 // quotable thing in the repository and the least defensible.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { classify } from "../packages/classifier/dist/index.js";
 import {
   DISHONEST_BINDINGS,
@@ -55,7 +56,13 @@ import {
 const argv = process.argv.slice(2);
 const outIdx = argv.indexOf("--out");
 const outFile = outIdx >= 0 ? argv[outIdx + 1] : undefined;
-const markdown = argv.includes("--markdown") || outFile !== undefined;
+// `--check` renders the same markdown and COMPARES rather than writing. `docs/REPORT.md` is a
+// committed copy of generated output, and nothing verified it: `pnpm blocks:check` covers the
+// GENERATED blocks inside hand-written documents and has never looked at this file, so it could sit
+// stale indefinitely while every gate stayed green. It drifted during section 38 and was noticed by
+// eye. See DEFECTS_FOUND.md section 39.
+const check = argv.includes("--check");
+const markdown = argv.includes("--markdown") || outFile !== undefined || check;
 
 const CORPUS = new URL("../corpus/", import.meta.url).pathname;
 const NAMES = ["holdout", "holdout_v2", "tuning", "derived", "adaptive", "imported"];
@@ -350,7 +357,46 @@ if (markdown) {
     "",
     ...sections.flatMap((s) => [`## ${s.title}`, "", "```", s.body, "```", ""]),
   ].join("\n");
-  if (outFile) {
+  if (check) {
+    // The file this check is about, named here rather than passed, so `--check` cannot be pointed at
+    // something that happens to match.
+    const target = new URL("../docs/REPORT.md", import.meta.url).pathname;
+    const onDisk = existsSync(target) ? readFileSync(target, "utf8") : "";
+    if (onDisk === md) {
+      console.log("docs/REPORT.md is current with `pnpm report:markdown`.");
+    } else {
+      const a = onDisk.split("\n");
+      const b = md.split("\n");
+      const at = a.findIndex((l, i) => l !== b[i]);
+      console.error("");
+      console.error("  docs/REPORT.md is STALE relative to `pnpm report:markdown`.");
+      console.error("");
+      if (at >= 0) {
+        console.error(`  first difference at line ${at + 1}:`);
+        console.error(`    on disk:    ${(a[at] ?? "<end of file>").slice(0, 100)}`);
+        console.error(`    generated:  ${(b[at] ?? "<end of file>").slice(0, 100)}`);
+      } else {
+        console.error(
+          `  the files differ in length: ${a.length} lines on disk, ${b.length} generated.`,
+        );
+      }
+      console.error("");
+      console.error(
+        "  Run `pnpm report:markdown` and READ THE DIFF before committing: a changed number",
+      );
+      console.error("  is either a real result or a regression, and this check cannot tell which.");
+      console.error("");
+      console.error(
+        "  Order matters. `pnpm lint:fix` moves the LOC counts and `pnpm blocks:write`",
+      );
+      console.error("  rewrites the tables this report reads, so run:");
+      console.error(
+        "    pnpm lint:fix && pnpm blocks:write && pnpm report:markdown && pnpm blocks:check",
+      );
+      console.error("");
+      process.exit(1);
+    }
+  } else if (outFile) {
     writeFileSync(outFile, md);
     console.log(`written: ${outFile}`);
   } else {

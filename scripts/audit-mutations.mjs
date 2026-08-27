@@ -225,6 +225,76 @@ import {`,
     tests: "packages/conformance/test/receiptadversary.test.ts",
     why: 'Rule 4 of `slotsOf` is what makes the slot model total: without it two arguments declaring path "p" collide, and one receipt covers both. The `duplicate_path` shape existed to watch this and could not - it issued ONE receipt, so the second argument went uncovered and the action was DENIED whether or not the suffixing ran, and deleting rule 4 produced zero findings. With a receipt per slot it produces 544 over_block findings. See §37',
   },
+  // ---- the receipt-binding branches, each measured by deletion in section 37 --------------------
+  //
+  // WHY THEY ARE ENTRIES AND NOT A TABLE. Section 37 published findings counts for ten branches of
+  // `coverFor`. Four already had entries; the other six were numbers taken once and never re-derived,
+  // which is exactly the state the mis-declaration figures were in before section 30 and the robust
+  // figures before section 38. A measurement nothing re-runs is a claim, not evidence.
+  //
+  // Each names `receiptadversary.test.ts`, which goes red on findings > 0. The counts are NOT
+  // repeated in the `why` text: the audit proves the branch is watched, and section 37's table - with
+  // its seed and iteration count - is the one place the magnitudes live.
+  {
+    id: "receipt-label-binding",
+    claim: "a label-only receipt admits only the argument whose name it carries",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    } else if (r.argName !== a.arg.name) {`,
+    replace: `    } else if (false) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "The fallback half of slot matching, and distinct from `slot-binding`, which guards the AMBIGUOUS-label branch above it. With this deleted a receipt naming any label admits any argument of the action. Section 36 found the `wrong_name` shape was a second copy of `wrong_slot` and reached this branch zero times; it now reaches it. See §36 and §37",
+  },
+  {
+    id: "receipt-expiry",
+    claim: "an expired receipt admits nothing",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (now !== undefined && r.scope?.expiresAt != null && now > r.scope.expiresAt) {`,
+    replace: `    if (now !== undefined && r.scope?.expiresAt != null && now > Number.MAX_SAFE_INTEGER) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "A scope with an expiry that is never enforced is a scope. Section 34 named expiry as one of three branches a search reached for the first time, and it is the one whose figure was least reproducible - it was published with no seed and re-measured in §37",
+  },
+  {
+    id: "receipt-role-binding",
+    claim: "a receipt issued for one role does not admit an argument in another",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (r.capability !== capability || r.role !== a.arg.role) {`,
+    replace: `    if (r.capability !== capability) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "HALF a condition, deliberately: the capability check stays and only the role check goes, so this cannot be satisfied by any test that merely notices a cross-capability receipt. Section 33 measured that this half was caught by `unguarded.test.ts` alone, which row 14 did not name",
+  },
+  {
+    id: "receipt-source-binding",
+    claim: "a receipt bound to a source does not admit an argument that source did not feed",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (r.scope?.source != null && !a.arg.derivedFrom.includes(r.scope.source)) {`,
+    replace: `    if (r.scope?.source != null && a.arg.derivedFrom.includes(r.scope.source)) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "INVERTED rather than disabled, so the branch still runs and still costs a lookup - a mutation that deletes a condition can be caught by a coverage tool, and one that reverses it cannot. The source binding is what stops a receipt issued against a trusted feed admitting a value that arrived from somewhere else",
+  },
+  {
+    id: "receipt-lift-level",
+    claim: "a receipt admits nothing above the taint it lifts to",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (!taintAtMost(a.taint, r.lifts)) {`,
+    replace: `    if (!taintAtMost(a.taint, r.lifts) && false) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "The lattice half of admission: a receipt that lifts to TOOL_DERIVED must not admit an UNTRUSTED_EXTERNAL value. Section 36 measured that NO shape covered this - one hand-written test carried the whole branch - and added `lifts_too_low` to reach it",
+  },
+  {
+    id: "receipt-rule-liftable",
+    claim: "a receipt admits nothing under a rule its capability row does not lift by",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (!row.liftableBy.has(r.rule)) {`,
+    replace: `    if (!row.liftableBy.has(r.rule) && false) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "The row decides which rules can lift it at all, and this is where that decision is enforced. It is also the branch that made the receipt search vacuous on its first run - every generated receipt used a rule `web_fetch` does not accept, so nothing was ever admitted while the report read as broad coverage. See §34",
+  },
 ];
 
 const run = (cmd, opts = {}) => {

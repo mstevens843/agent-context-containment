@@ -138,18 +138,40 @@ export function formatSensitivity(results: readonly SensitivityResult[]): string
     rule,
     "",
   ];
-  lines.push(
-    `  ${"case".padEnd(13)}${"chosen".padEnd(26)}${"peer alternatives".padEnd(52)}understated`,
-  );
-  lines.push(`  ${"-".repeat(108)}`);
-  for (const r of results) {
+  // COLUMN WIDTHS MEASURED FROM THE DATA, NOT TYPED.
+  //
+  // They were literals - 13 for the case id, 26 for the chosen mapping - sized when every id looked
+  // like `ia-imp-001`. The data-stealing rows are `ia-imp-ds-001`, three characters longer, so every
+  // one of the 32 ran its id straight into the next column and printed `ia-imp-ds-001email_send=`.
+  // A fixed width is a claim about data the table does not control. See DEFECTS_FOUND.md section 38.
+  const cells = results.map((r) => {
     const of = (k: AlternativeKind) =>
       r.alternatives
         .filter((a) => a.kind === k)
         .map((a) => `${a.capability}=${short(a.decision)}`)
         .join(" ");
+    return {
+      id: r.id,
+      chosen: `${r.chosen.capability}=${short(r.chosen.decision)}`,
+      peer: of("peer"),
+      understated: of("understated"),
+    };
+  });
+  /** Widest cell in a column, never narrower than its heading, plus a two-space gutter. */
+  const widthOf = (heading: string, pick: (c: (typeof cells)[number]) => string) =>
+    Math.max(heading.length, ...cells.map((c) => pick(c).length), 0) + 2;
+  const wId = widthOf("case", (c) => c.id);
+  const wChosen = widthOf("chosen", (c) => c.chosen);
+  const wPeer = widthOf("peer alternatives", (c) => c.peer);
+  lines.push(
+    `  ${"case".padEnd(wId)}${"chosen".padEnd(wChosen)}${"peer alternatives".padEnd(wPeer)}understated`,
+  );
+  lines.push(
+    `  ${"-".repeat(wId + wChosen + wPeer + Math.max("understated".length, ...cells.map((c) => c.understated.length), 0))}`,
+  );
+  for (const c of cells) {
     lines.push(
-      `  ${r.id.padEnd(13)}${`${r.chosen.capability}=${short(r.chosen.decision)}`.padEnd(26)}${of("peer").padEnd(52)}${of("understated")}`,
+      `  ${c.id.padEnd(wId)}${c.chosen.padEnd(wChosen)}${c.peer.padEnd(wPeer)}${c.understated}`,
     );
   }
   const robust = results.filter((r) => r.robust).length;

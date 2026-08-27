@@ -450,7 +450,14 @@ export function searchAdversarially(opts: {
   return { explored: opts.iterations, findings, cleanExplored, shapes };
 }
 
-/** A loosened table, for the negative control. Raising a ceiling must make under-block fire. */
+/**
+ * A loosened table, for the CEILING control. Raising a ceiling must make under-block fire.
+ *
+ * WHAT IT DOES NOT CONTROL FOR. Every finding it produces is a ceiling breach, and an engine whose
+ * ceilings admit everything never needs a receipt - so this says nothing about whether a search can
+ * detect a receipt-BINDING defect. Its docstring claimed otherwise for a release. Use
+ * `everyRuleLiftsPolicy` for that half. See DEFECTS_FOUND.md section 38.
+ */
 export const loosenedPolicy = (): CapabilityPolicy => {
   const out: Record<string, unknown> = {};
   for (const [name, row] of Object.entries(CAPABILITY_POLICY)) {
@@ -461,6 +468,38 @@ export const loosenedPolicy = (): CapabilityPolicy => {
         Object.keys(row.roleCeilings).map((r) => [r, "UNTRUSTED_EXTERNAL"]),
       ),
     };
+  }
+  return out as CapabilityPolicy;
+};
+
+/**
+ * A table that accepts EVERY declassification rule, for the receipt-binding control.
+ *
+ * THE CONTROL THE LOOSENED TABLE CANNOT BE. Ceilings are left exactly as shipped, so arguments are
+ * still over their ceiling and a receipt is still REQUIRED - only the engine's judgement about which
+ * rules a row lifts by is broken. A receipt whose rule the shipped row rejects is then admitted by
+ * the engine and refused by the oracle, which is a binding disagreement rather than a ceiling one.
+ *
+ * Measured at 5,000 iterations on seed 0xc0ffee: 872 findings against the shipped table (563
+ * `wrong_admission`, 309 `under_block`), and zero when judged against its own widened table - so it
+ * is a control and not a tautology.
+ */
+export const everyRuleLiftsPolicy = (): CapabilityPolicy => {
+  // Listed rather than derived from the union, because a rule added to the type but not to this list
+  // would silently narrow the control. `validatePolicy` rejects an unknown rule, so a stale entry
+  // here fails loudly rather than quietly.
+  const ALL_RULES = [
+    "user_confirmed_value",
+    "allowlist_member",
+    "numeric_envelope",
+    "clean_selection",
+    "echo_of_clean",
+    "attested_tool_output",
+    "tuple_confirmed",
+  ] as const;
+  const out: Record<string, unknown> = {};
+  for (const [name, row] of Object.entries(CAPABILITY_POLICY)) {
+    out[name] = { ...row, liftableBy: new Set(ALL_RULES) };
   }
   return out as CapabilityPolicy;
 };

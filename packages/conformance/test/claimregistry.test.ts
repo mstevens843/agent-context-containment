@@ -208,17 +208,34 @@ describe("claim registry", () => {
       "CI no longer verifies the frozen holdout against its manifest",
     ).toBe(true);
 
-    // POSTGRES MUST STAY OUT, and the reason must stay written down. Without DATABASE_URL the proof
-    // reports SKIPPED / NOT PROVEN and exits 0 - a green step that proved nothing. Adding it would
-    // convert an honest skip into a rubber stamp, which is the shape of half of DEFECTS_FOUND.md.
-    expect(
-      ci.includes("pnpm prove:postgres"),
-      "CI runs prove:postgres, which without DATABASE_URL is a green step that proves nothing",
-    ).toBe(false);
-    expect(
-      ci.includes("DATABASE_URL"),
-      "the reason Postgres is absent from CI is no longer recorded in the workflow",
-    ).toBe(true);
+    // POSTGRES MAY RUN IN CI, BUT NEVER WITHOUT A DATABASE.
+    //
+    // This test used to require that `prove:postgres` appear NOWHERE in the workflow. The property it
+    // was protecting is narrower than that, and stating it as "postgres must stay out" made the
+    // absence of a real database look like the goal: without `DATABASE_URL` the proof reports
+    // SKIPPED / NOT PROVEN and exits 0, so an unconditioned step is a green tick that reached no
+    // database - the rubber stamp that half of DEFECTS_FOUND.md is about.
+    //
+    // Section 40 added a `postgres-proof` job with a real service container, which does not have that
+    // hazard. So the rule is the one that was always meant: if CI runs the proof, a `DATABASE_URL`
+    // must be in scope, and the job must refuse a run that never reached a database.
+    // See DEFECTS_FOUND.md section 40.
+    if (ci.includes("pnpm prove:postgres")) {
+      expect(
+        ci.includes("DATABASE_URL"),
+        "CI runs prove:postgres with no DATABASE_URL in the workflow - that is a green step that reaches no database",
+      ).toBe(true);
+      expect(
+        ci.includes("PROVEN against a real Postgres"),
+        "the postgres job does not check that the run actually reached a database, so a broken service container would pass it",
+      ).toBe(true);
+    } else {
+      // Still absent is still fine - but then the reason has to be written down, as it was before.
+      expect(
+        ci.includes("DATABASE_URL"),
+        "the reason Postgres is absent from CI is no longer recorded in the workflow",
+      ).toBe(true);
+    }
   });
 
   it("the claims that most need defending are the ones that have it", () => {

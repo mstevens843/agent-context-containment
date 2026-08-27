@@ -49,7 +49,7 @@ Found by adding an import and watching nothing fail.
 **What v1.0 built:**
 
 - **`pnpm audit:mutations`** — fifteen critical branches, each deleted, rebuilt and re-tested, with the
-  tests required to **fail**. **15/15 caught**. Two properties learned the hard way: it refuses to run
+  tests required to **fail**. **21/21 caught**. Two properties learned the hard way: it refuses to run
   unless the baseline is green (a differential measurement needs a starting point), and every `find`
   must match exactly once (three entries matched zero times and would have reported as caught).
 - **`docs/claims.json`** — 27 headline claims, each with its grade, the test that would fail if it
@@ -216,11 +216,14 @@ and answers with numbers rather than assurances.
 
 Four of those numbers are new and none of them flatter the project:
 
-- **6/6 robust, 4/6 broken.** Every imported case is refused under every capability mapping a
-  different reviewer could defend — so on that split the refusals are evidence about the attacks, not
-  about my table. And four of the six sail straight through if the tool is declared weaker than it
-  is. Containment enforces flow *given* the declaration; that limitation was already written down,
-  and now it has a price.
+- **30/30 direct-harm robust** and **32/32 data-stealing robust**, and **21 of 30** direct-harm plus
+  **32 of 32** data-stealing broken by an understated tool. Every imported case is refused under every
+  capability mapping a different reviewer could defend — so on that split the refusals are evidence
+  about the attacks, not about my table. And those same cases sail straight through if the tool is
+  declared weaker than it is.
+  Containment enforces flow *given* the declaration; that limitation was already written down, and
+  now it has a price. This paragraph read `6/6 robust, 4/6 broken` until section 38 — the same
+  staleness as §18, in the half of the mapping report that had no registered fact.
 - **`reference` makes no error on any split — and the report says that is a corpus fact, not a
   result.** No case here is hard enough to cost the shipped policy anything, so its position on the
   safety/utility curve is unmeasured rather than optimal. `strict` pays 12 over-blocks; `permissive`
@@ -267,10 +270,10 @@ engine. The benign column is the only thing that tells them apart.
 
 | | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 | v1.0.1 |
 |---|---|---|---|---|---|---|
-| tests | 263 | 304 | 361 | 414 | 534 | **633** |
+| tests | 263 | 304 | 361 | 414 | 534 | **655** |
 | hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **130** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 | 7 |
-| non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | 34 |
+| non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | **62** |
 | imports rebuilt from committed source | 0 | 0 | 6/6 | 34/34 | 34/34 | **62/62** |
 | upstream attack SHAPES imported | 1 | 1 | 1 | 2 | 2 | 2 |
 | packages | 5 | 5 | 5 | 5 | 5 | 5 |
@@ -281,7 +284,7 @@ engine. The benign column is the only thing that tells them apart.
 | **real-database proof scenarios** | 0 | 0 | 0 | 0 | 11, live Postgres | **11, live Postgres** |
 | review workflows | 0 | 0 | 0 | 4 | 4 | 4 |
 | **reviewer decides for itself** | no | no | no | no | yes | **yes** |
-| defects recorded | 7 | 8 | 8 | 14 | 22 | **37** |
+| defects recorded | 7 | 8 | 8 | 14 | 22 | **40** |
 | decisions produced by corpus | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
 
 **v0.8 is the first pass since v0.4 to add corpus cases, and it added no engine capability.** The 28
@@ -293,9 +296,11 @@ checking what was already there, or of making a claim reproducible by someone wh
 The criticism these passes answer is not "too few features" — it is "graded by its own author, and
 undeployable outside one process".
 
-Corpus by split: `holdout` 16 (frozen, unchanged) · `holdout_v2` 6 · `tuning` 25 · `derived` 9 ·
-`adaptive` 8 · **`imported` 34 (upstream content, exact, two attack shapes)** · `generated` 648
-(mechanical). Every split reported separately and never pooled.
+Corpus by split **as it stood at v0.7**, kept as a record of that pass rather than recomputed:
+`holdout` 16 · `holdout_v2` 6 · `tuning` 25 · `derived` 9 · `adaptive` 8 · `imported` 34 ·
+`generated` 648. Every split reported separately and never pooled. **For the current split sizes read
+the generated block above**, which `pnpm blocks:check` keeps honest — this line is history, and it
+sat here unlabelled while three of its numbers went stale.
 
 **The v0 holdout headline did not move across either pass** — 9/9 attacks, 6/6 benign, exact decision
 agreement 7/15. Neither pass added capability to the engine; both added ways of checking it.
@@ -324,9 +329,8 @@ Counted, not remembered — these were stale for four versions before v0.6.
 
 | | |
 |---|---|
-| Packages | **5** — `core`, `classifier`, `conformance`, `retrieval`, `ledger` |
-| Packages | **5** — see the generated block below for everything counted |
-| Corpus | **98** hand-written and imported, 6 splits, + **648** generated at run time |
+| Packages | **5** — `core`, `classifier`, `conformance`, `retrieval`, `ledger`; see the generated block below for everything counted |
+| Corpus | **130** hand-written and imported, 6 splits, + **648** generated at run time |
 | Tests | see the generated block below |
 | Mutants | **9** broken engines + 1 reference, + 3 deliberately broken ledger stores |
 | Policy profiles | **5**, all validated at construction |
@@ -334,23 +338,23 @@ Counted, not remembered — these were stale for four versions before v0.6.
 <!-- GENERATED:repo-stats -->
 | | |
 |---|---|
-| Source LOC | **12,888** across 5 packages |
-| Test LOC | **11,515** across 47 files |
+| Source LOC | **12,958** across 5 packages |
+| Test LOC | **11,856** across 47 files |
 | Example LOC | **1,843** across 15 files |
-| Script LOC | **3,569** — 20 report/proof/import scripts, 6 shell |
-| Total TypeScript | **26,246** |
-| Docs (docs/) | **5,865 lines** across 24 files |
+| Script LOC | **4,048** — 20 report/proof/import scripts, 6 shell |
+| Total TypeScript | **26,657** |
+| Docs (docs/) | **6,184 lines** across 24 files |
 <!-- /GENERATED -->
 
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
-| `conformance` | 266 |
-| `core` | 265 |
+| `conformance` | 287 |
+| `core` | 266 |
 | `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **633** |
+| **total** | **655** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -369,9 +373,11 @@ Counted, not remembered — these were stale for four versions before v0.6.
 
 Plus **648 generated** variants, built at run time from the frozen bases and never pooled with the rest.
 
-The imported split is two datasets and is reported as two: **direct harm 17** (one attacker tool, the
-harm is the call) and **data stealing 17** (a pair — read, then send; the harm is what leaves). Both
-InjecAgent, MIT, commit `f19c9f2`, rebuilt byte-identically by `pnpm import:check`.
+The imported split is two datasets and is reported as two: **direct harm (30)** — one attacker tool,
+the harm is the call — and **data stealing (32)** — a pair, read then send; the harm is what leaves.
+Both InjecAgent, MIT, commit `f19c9f2`, rebuilt byte-identically by `pnpm import:check`. This sentence
+read `17` and `17` from the v0.8 import until section 40, three releases after the split grew: the
+counts are registered facts and the phrasing here now matches what checks them.
 
 ## What is claimed, and at what grade
 
@@ -390,7 +396,7 @@ it was cited for, and §11 was "fixed" when it was mitigated.
 | every mutant is bitten somewhere, none everywhere | **PROVEN** | `pnpm report:mutants` exits 1 otherwise |
 | no document asserts more than the evidence supports | **PROVEN** | 6 rules over every markdown paragraph; an injected false claim is caught |
 | the engine knows no domain vocabulary | **PROVEN** | every file in `packages/core/src` scanned, with one asserted exemption: `toolrisk.ts`, an advisory naming heuristic `decide()` does not import |
-| **concurrent reserve, replay, restart, crash, bounded reclaim** | **SKIPPED / NOT PROVEN on a default run.** On a run with `DATABASE_URL`: **11/11** | `pnpm prove:postgres` — two and twenty independent connections, plus a negative control that must double-claim. CI sets no `DATABASE_URL` and does not run it, because a skip that exits 0 is a green step proving nothing. A passing run proves it **for that database, that version and that topology only** — not for Postgres in general and not for your deployment |
+| **concurrent reserve, replay, restart, crash, bounded reclaim** | **PROVEN in CI against a service container.** Still SKIPPED / NOT PROVEN on a local `pnpm test`, which sets no `DATABASE_URL` | `pnpm prove:postgres` — two and twenty independent connections, plus a negative control that must double-claim. The `postgres-proof` job runs it on every push against a real `postgres` service, and greps the output for the PROVEN line because the script exits 0 when no database is reachable. A passing run proves it **for that database, that version and that topology only** — not for Postgres in general and **not for your deployment**, which is a fact about infrastructure no test here can reach |
 | the async reservation protocol | **ADAPTER-PROVEN** | against UNIQUE-constraint semantics in-process |
 | cross-host safety, sync path | **ADAPTER-PROVEN** | `proveCrossHost`, 5 interleavings |
 | the real-database proof, on a run without `DATABASE_URL` | **SKIPPED / NOT PROVEN** | reported as skipped, never as a pass |
@@ -414,8 +420,8 @@ this entry read before v1.0.
 | **the ingestion helpers infer nothing** | **PROVEN** | a hostile page declared `SYSTEM` is ALLOWED outright — `ingest.test.ts` asserts it, so the trust boundary is never a surprise |
 | `contextOf` refuses a dangling edge | **PROVEN** | an unresolvable edge would read as CLEAN — a laundering path that looks like a typo |
 | that a declaration is honest | **DELEGATED TO CALLER** | the helpers make it harder to mistype, never harder to lie |
-| **that these tests could actually fail** | **PROVEN, for 15 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
-| that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 20 a reader would quote, not every sentence |
+| **that these tests could actually fail** | **PROVEN, for 21 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
+| that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 27 a reader would quote, not every sentence |
 | that the audit machinery has no blind spots | **NOT CLAIMED** | it was written by the person whose claims it checks, and shares his blind spots exactly. The independent reader is the only control that does not |
 | `staleAfterMs` has no free value | **KNOWN RISK** | too long strands a receipt, too short double-spends |
 
@@ -497,16 +503,16 @@ alone has never counted in this repository.
 | check | result |
 |---|---|
 | corpus manifest, 7 files | **PASS** |
-| exact imports, 34 cases | **PASS**, byte-identical |
+| exact imports, 62 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
 | lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 633** (534 before this pass) |
+| test | **PASS — 655** (534 before this pass) |
 | `decide()` is total: no input throws, every malformed one is denied | **PASS**, explicit shapes plus a seeded sweep |
 | a provenance DAG resolves by path, and a cycle still fails closed | **PASS**, diamond and cycle pinned separately |
 | an unrecognised parameter role admits clean input only | **PASS**, and it could ALLOW before |
 | source comments checked for absolute claims | **PASS**, and an injected false claim is caught |
 | `examples/` typechecked | **PASS** — nothing typechecked that directory until this pass |
-| CI claim gates: 8 — `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations`, `adversary`, `audit:release`, plus the frozen-holdout job | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
+| CI claim gates: 9 — `blocks:check`, `report:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations`, `adversary`, `audit:release`, plus the frozen-holdout job | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
 | adversarial mutation sweep, 105 guards | **73 protected · 30 unguarded · 2 unreachable** when first swept. **All 30 are now closed**, each written against its mutation and each watched to fail under it — 9 in §19, 18 in §20, 3 in §21. The 2 unreachable are dispositioned, not covered: see the branch-risk table below |
 | per-package `tsconfig.test.json` | **PASS** ×5 |
 | examples ×15, playground matrix | **PASS** |
@@ -531,7 +537,7 @@ alone has never counted in this repository.
 | reviewer and engine demonstrably disagree, both directions | **PASS** |
 | semantic advisories: 0 false positives on 10 honest bindings | **PASS** |
 | prose guard: no document overstates | **PASS**, and an injected false claim is caught |
-| mutation audit, 15 critical branches | **15/15 caught** — deleting any fix fails a test |
+| mutation audit, 21 critical branches | **21/21 caught** — deleting any fix fails a test |
 | mutation audit refuses a non-green baseline | **PASS** — a differential measurement needs a starting point |
 | mutation audit refuses a zero-match entry | **PASS** — caught 3 of its own entries on the first run |
 | generated blocks — 7 generated blocks match their generators | **PASS**, and it caught its first real drift within minutes |
@@ -642,7 +648,8 @@ this history. `frozenAtCommit` is `null` and stays there.
 **Closed in v0.8:** the async ledger boundary (reserve/decide/settle, engine still pure); the
 cross-host guard defect §10 (the win/lose bit now crosses the interface); the receipt-binding hole
 §11; two shipped-table defects §12 and §13, found by the validator on its first run; and the
-"mostly self-authored corpus" criticism reduced again — 34 of 96 cases are now upstream's bytes.
+"mostly self-authored corpus" criticism reduced again — 34 of 96 cases were upstream's bytes **at
+that release**. It is 62 of 130 now; this line records what v0.8 changed, not the current corpus.
 
 **Closed in v0.7:** cross-host replay (a ledger can now claim `crossHostSafe`, after proving it); the
 unverifiable exact-import claim (rebuilt from committed source, byte-checked); the exact/hand-derived

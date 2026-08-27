@@ -736,14 +736,22 @@ function coverFor(
    * tree. Both are recorded in DEFECTS_FOUND.md section 35.
    *
    * It is kept rather than deleted because it is a fail-closed backstop costing one set lookup, and
-   * because the property that makes it dead - slot uniqueness - is exactly the kind of invariant a
-   * later refactor could weaken without noticing. `unguarded.test.ts` asserts BOTH halves: that no
-   * receipt covers two slots, and that this guard is currently unreachable. If slot uniqueness ever
-   * breaks, that test fails and says this guard has come alive, rather than letting it sit here
-   * looking like protection that was never needed.
+   * IT IS NOT DEAD, and this paragraph said it was. Two receipt OBJECTS sharing one id reach it: the
+   * first is spent on slot one, the second matches slot two, and `usedReceipts` already holds the id.
+   * That is the `reused_in_action` shape in `packages/conformance/src/receiptadversary.ts`, deleting
+   * this branch produces findings in the hundreds there, and `receipt-one-slot` is an entry in
+   * `pnpm audit:mutations`. What is true is narrower: a SINGLE receipt object cannot reach it,
+   * because slot uniqueness means one object matches at most one slot.
    *
-   * Recorded as confirmed-dead in docs/DEFECTS_FOUND.md §20. This is the SECOND false claim removed
-   * from this comment block; the first was corrected in v0.9 and is described below.
+   * `unguarded.test.ts` asserts three things now - that no receipt covers two slots, that a single
+   * receipt object never reaches this guard, and that two sharing an id do. The third was missing,
+   * which is what let "unreachable" stand for three releases: without it the second reads as a
+   * statement about the engine rather than about the sweep.
+   *
+   * Filed as UNREACHABLE in docs/DEFECTS_FOUND.md §20, corrected in §34, re-measured with a seed in
+   * §37, and this comment was the last file still asserting the old disposition - §39. This is the
+   * THIRD false claim removed from this comment block; the first was corrected in v0.9 and is
+   * described below.
    *
    * An earlier version of this comment claimed a second fix - "rejecting duplicate argument names
    * outright" - that was never written. Nothing enforced it and nothing could have; duplicate labels

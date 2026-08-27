@@ -25,6 +25,14 @@ and neither can be shown to predate anything.
 
 ## Classifier vs containment, by split
 
+**The block below is a SNAPSHOT, not current output.** It was pasted from `pnpm report` at v0.6 and
+was never regenerated: its `tuning` row says 19 where the split now holds 29, and the `adaptive` and
+`imported` rows did not exist yet. It is kept because the SHAPE of the comparison is the point of this
+section, and it is labelled because an unlabelled pasted table is indistinguishable from a current
+result — which is how it sat stale for four releases. **For current numbers read
+[REPORT.md](./REPORT.md)**, which `pnpm report:check` keeps in step with `pnpm report:markdown`.
+See DEFECTS_FOUND.md section 40.
+
 ```
   CONTAINMENT
   split         n    attacks blocked   benign allowed   FN    FP    escalated
@@ -47,9 +55,11 @@ and neither can be shown to predate anything.
   derived       4    4/4               0/4
 ```
 
-**23 of 23 versus 0 of 23** on silent attacks, and the classifier over-blocks **3 of 6** benign
-holdout cases because they quote attack strings. Both halves of the failure mode, in every split
-where the row exists.
+Containment contains every silent attack in the snapshot and the classifier catches none of them,
+and the classifier over-blocks benign holdout cases because they quote attack strings. Both halves of
+the failure mode, in every split where the row exists. The fractions are deliberately not restated
+here: this section had carried `23 of 23 versus 0 of 23` since v0.6, long after the corpus grew past
+23 silent attacks, because a number retyped beside a table is a number nothing recomputes.
 
 Read the containment column with the caveat it deserves: a flat line across splits is **partly a
 prediction of the architecture**, because the policy never reads the untrusted text and novel phrasing

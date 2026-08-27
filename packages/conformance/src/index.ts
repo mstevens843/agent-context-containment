@@ -155,6 +155,7 @@ export {
   type AdversaryFinding,
   type AdversaryResult,
   formatFindings,
+  everyRuleLiftsPolicy,
   loosenedPolicy,
   searchAdversarially,
 } from "./adversary.js";

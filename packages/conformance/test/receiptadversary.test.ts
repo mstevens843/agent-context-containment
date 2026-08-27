@@ -7,13 +7,19 @@
 // `unguarded.test.ts`, and **the same receipt reused inside one action** was caught by NOTHING: the
 // whole suite stayed green with that branch deleted.
 //
-// Both are now reached by a search. Measured, by deleting each branch and counting findings at
-// 12,000 iterations: reuse-in-one-action 902, the role half of receipt binding 589, expiry 593.
+// Both are now reached by a search. The per-branch findings counts are NOT repeated here: they were
+// published in this header as 902 / 589 / 593 with no seed, none of them reproduced, and section 37
+// re-measured every one. A figure copied into a comment is a figure nothing re-checks. The table
+// lives in DEFECTS_FOUND.md section 37 with its seed and iteration count, and `pnpm branch:controls`
+// re-derives it.
 //
 // AND IT CORRECTS A DISPOSITION. Section 20 filed `P05` - the one-receipt-one-slot guard - as
 // UNREACHABLE, on the strength of "an exhaustive sweep of argument and receipt shapes reaches it
-// zero times". It is reachable: deleting it changes the answer on hundreds of generated inputs, and
-// a two-argument action with one receipt id reaches it directly. See DEFECTS_FOUND.md section 34.
+// zero times". That sweep passes ONE receipt object per call, and the guard sits AFTER slot matching,
+// so slot uniqueness means a single receipt matches at most one slot and the guard cannot fire. Its
+// zero was a fact about the sweep. TWO receipt objects sharing one id reach it directly - the
+// `reused_in_action` shape below - and deleting it changes the answer on hundreds of generated
+// inputs. See DEFECTS_FOUND.md sections 34 and 37.
 //
 // THE CONTROLS MATTER MORE THAN THE PASS:
 //
@@ -28,6 +34,7 @@ import { join } from "node:path";
 import { CAPABILITY_POLICY } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import { formatFindings } from "../src/adversary.js";
+import { everyRuleLiftsPolicy } from "../src/adversary.js";
 import { RECEIPT_SHAPES, receiptSearchScope, searchReceipts } from "../src/receiptadversary.js";
 
 const REPO = join(import.meta.dirname, "..", "..", "..");
@@ -44,7 +51,10 @@ const SEED = 0x0dec_0001;
  * breach. This control says the search can produce findings; it does NOT say the search can detect a
  * receipt-BINDING defect, because a loosened engine needs no receipts at all.
  *
- * What licenses the binding claim is the mutation set, each measured by deletion at 12,000 iterations
+ * The BINDING control below closes that gap: it accepts every declassification rule while leaving
+ * ceilings exactly as shipped, so receipts are still required and only rule acceptance is broken.
+ *
+ * What also licenses the binding claim is the mutation set, each measured by deletion at 12,000 iterations
  * on seed 0x0dec0001: P05 reuse 1,232, the argName branch 1,034, the lift level 1,028, value binding
  * 1,968, source binding 989, expiry 902, the role half 887, the label-ambiguity guard 576, rule 4
  * collision suffixing 544, and `liftableBy` 1,022. Two of those - `receipt-one-slot` and
@@ -181,6 +191,44 @@ describe("the receipt search can fail", () => {
       control.findings.length,
       "a policy that admits untrusted values everywhere produced no finding - the search proves nothing",
     ).toBeGreaterThan(0);
+  });
+
+  it("catches a receipt admitted under a rule its row does not lift by", () => {
+    // THE BINDING CONTROL, and the reason the loosened-ceiling one above is not it. Ceilings are left
+    // exactly as shipped, so every argument is still over its ceiling and a receipt is still REQUIRED;
+    // only the engine's judgement about WHICH RULES a row lifts by is broken. A loosened-ceiling
+    // engine needs no receipts at all, so it can never fail this way - which is why the search went a
+    // release with its binding claim licensed by a control that could not test it.
+    // See DEFECTS_FOUND.md section 38.
+    const control = searchReceipts({
+      iterations: 3_000,
+      seed: SEED,
+      policy: everyRuleLiftsPolicy(),
+      oraclePolicy: CAPABILITY_POLICY,
+    });
+    expect(
+      control.findings.length,
+      "an engine accepting every declassification rule produced no finding - the binding claim is unlicensed",
+    ).toBeGreaterThan(0);
+    // AND IT MUST BE A BINDING DISAGREEMENT, not a ceiling one. Without this the control would pass
+    // on any broken engine at all, which is the failure it exists to correct.
+    expect(
+      control.findings.filter((f) => f.kind === "wrong_admission" || f.kind === "under_block")
+        .length,
+      "the control fired, but on nothing that reads as a receipt-binding disagreement",
+    ).toBeGreaterThan(0);
+  });
+
+  it("that control is not a tautology - it reports nothing against its own table", () => {
+    // The near-miss. A control judged by the table it was built from proves only that the search
+    // agrees with itself, and the first version of the CEILING control did exactly that.
+    const tautology = searchReceipts({
+      iterations: 3_000,
+      seed: SEED,
+      policy: everyRuleLiftsPolicy(),
+      oraclePolicy: everyRuleLiftsPolicy(),
+    });
+    expect(tautology.findings).toHaveLength(0);
   });
 
   it("refuses a partial oracle policy rather than judging the engine by its own table", () => {

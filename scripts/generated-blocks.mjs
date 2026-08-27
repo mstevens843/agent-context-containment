@@ -24,7 +24,9 @@
 // script that produces it, and `pnpm audit:claims` re-runs that script and compares. Blocks are for
 // TABLES; the claim registry is for SENTENCES. Both are needed because neither covers the other.
 
+import { execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { classify } from "../packages/classifier/dist/index.js";
 import {
   MUTANTS,
@@ -46,6 +48,92 @@ const all = splits.flatMap((s) => s.cases);
 
 const pad = (s, n) => String(s).padEnd(n);
 const frac = (a, b) => (b === 0 ? "  -  " : `${a}/${b}`);
+const stripAnsi = (s) => {
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    if (s.charCodeAt(i) === 27 && s[i + 1] === "[") {
+      let j = i + 2;
+      while (j < s.length && ((s[j] >= "0" && s[j] <= "9") || s[j] === ";")) j++;
+      if (s[j] === "m") {
+        i = j;
+        continue;
+      }
+    }
+    out += s[i];
+  }
+  return out;
+};
+
+const testOutputTail = (out) => stripAnsi(out).split("\n").slice(-40).join("\n").trim();
+
+/**
+ * Extract the package rows for the test-count block from Turborepo/Vitest output.
+ *
+ * The first version did this with:
+ *
+ *   pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed'
+ *
+ * That hid the useful output when CI went red: `grep` found no all-passing summary, returned 1, and
+ * the block generator crashed with empty stdout/stderr. A generated block may depend on a green test
+ * suite, but it must fail by naming the suite as red, not by pretending the docs are stale.
+ */
+export const parseTestCountsForBlock = (raw) => {
+  const out = stripAnsi(raw);
+  const failedSummaries = out
+    .split("\n")
+    .filter((line) => /:test:\s+(Test Files|Tests)\s+.*\bfailed\b/.test(line));
+
+  if (failedSummaries.length > 0) {
+    throw new Error(
+      [
+        "generated-blocks: pnpm test was red while computing the test-counts block.",
+        "This is a test failure, not stale generated documentation.",
+        ...failedSummaries.slice(-8),
+      ].join("\n"),
+    );
+  }
+
+  const per = [...out.matchAll(/^([^:\n]+):test:\s+Tests\s+(\d+)\s+passed\b/gm)].map((m) => {
+    const packageName = m[1].includes("/") ? m[1].slice(m[1].lastIndexOf("/") + 1) : m[1];
+    return [packageName, Number(m[2])];
+  });
+
+  if (per.length === 0) {
+    throw new Error(
+      [
+        "generated-blocks: could not parse per-package test counts from `pnpm -s test` output.",
+        "The test-count block parser needs to be updated for the current runner output.",
+        testOutputTail(out),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+
+  return per.sort((a, b) => b[1] - a[1]);
+};
+
+const runTestsForCountBlock = () => {
+  try {
+    return execSync("pnpm -s test", {
+      cwd: ROOT,
+      encoding: "utf8",
+      shell: "/bin/bash",
+      stdio: "pipe",
+    });
+  } catch (e) {
+    const out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+    throw new Error(
+      [
+        "generated-blocks: `pnpm -s test` failed while computing the test-counts block.",
+        "Fix the test suite first; do not refresh generated documentation from a red run.",
+        testOutputTail(out),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+};
 
 // ---- the generators ---------------------------------------------------------------------------
 // Each returns the exact text of one block. Keyed by the name in the marker.
@@ -234,22 +322,12 @@ const GENERATORS = {
   },
   "test-counts": () => {
     // Read from the packages themselves rather than from a remembered figure.
-    const out = execSync("pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed'", {
-      cwd: ROOT,
-      encoding: "utf8",
-      shell: "/bin/bash",
-    });
-    const per = [...out.matchAll(/([a-z]+):test:\s+Tests\s+(\d+) passed/g)].map((m) => [
-      m[1],
-      Number(m[2]),
-    ]);
+    const per = parseTestCountsForBlock(runTestsForCountBlock());
     const total = per.reduce((n, [, c]) => n + c, 0);
-    const rows = per.sort((a, b) => b[1] - a[1]).map(([p, c]) => `| \`${p}\` | ${c} |`);
+    const rows = per.map(([p, c]) => `| \`${p}\` | ${c} |`);
     return ["| package | tests |", "|---|---|", ...rows, `| **total** | **${total}** |`].join("\n");
   },
 };
-
-import { execSync } from "node:child_process";
 
 // ---- the files that carry blocks ---------------------------------------------------------------
 // Any file may carry a block. `corpus/imported/ATTRIBUTION.md` is here because its numbers went
@@ -257,79 +335,83 @@ import { execSync } from "node:child_process";
 const FILES = ["README.md", "STATUS.md", "corpus/imported/ATTRIBUTION.md"];
 const OPEN = /<!-- GENERATED:([a-z0-9-]+) -->/g;
 
-const mode = process.argv.includes("--write") ? "write" : "check";
-let problems = 0;
-let blocks = 0;
+const main = () => {
+  const mode = process.argv.includes("--write") ? "write" : "check";
+  let problems = 0;
+  let blocks = 0;
 
-/**
- * Blank out fenced code blocks before scanning for markers.
- *
- * Documenting the marker format is indistinguishable from using it, and the natural place to write
- * the example is a fenced block. Without this, `docs/ADVERSARIAL_AUDIT.md` explaining what a marker
- * looks like would be parsed as a marker naming a generator called "name" - which is exactly what
- * happened the first time, on this script's second run, in a sentence in STATUS.md. Replaced with
- * spaces rather than removed, so every reported offset still points at the right line.
- */
-const outsideCode = (text) => text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
+  /**
+   * Blank out fenced code blocks before scanning for markers.
+   *
+   * Documenting the marker format is indistinguishable from using it, and the natural place to write
+   * the example is a fenced block. Without this, `docs/ADVERSARIAL_AUDIT.md` explaining what a marker
+   * looks like would be parsed as a marker naming a generator called "name" - which is exactly what
+   * happened the first time, on this script's second run, in a sentence in STATUS.md. Replaced with
+   * spaces rather than removed, so every reported offset still points at the right line.
+   */
+  const outsideCode = (text) => text.replace(/```[\s\S]*?```/g, (m) => " ".repeat(m.length));
 
-for (const file of FILES) {
-  const path = ROOT + file;
-  let text = readFileSync(path, "utf8");
-  const found = [...outsideCode(text).matchAll(OPEN)];
-  for (const m of found) {
-    const name = m[1];
-    const gen = GENERATORS[name];
-    const startTag = `<!-- GENERATED:${name} -->`;
-    const endTag = "<!-- /GENERATED -->";
-    const from = text.indexOf(startTag);
-    const to = text.indexOf(endTag, from);
-    if (to === -1) {
-      console.error(`  ${file}: block "${name}" opens and never closes`);
+  for (const file of FILES) {
+    const path = ROOT + file;
+    let text = readFileSync(path, "utf8");
+    const found = [...outsideCode(text).matchAll(OPEN)];
+    for (const m of found) {
+      const name = m[1];
+      const gen = GENERATORS[name];
+      const startTag = `<!-- GENERATED:${name} -->`;
+      const endTag = "<!-- /GENERATED -->";
+      const from = text.indexOf(startTag);
+      const to = text.indexOf(endTag, from);
+      if (to === -1) {
+        console.error(`  ${file}: block "${name}" opens and never closes`);
+        problems++;
+        continue;
+      }
+      if (gen === undefined) {
+        console.error(
+          `  ${file}: block "${name}" names no generator. Known: ${Object.keys(GENERATORS).join(", ")}`,
+        );
+        problems++;
+        continue;
+      }
+      blocks++;
+      const current = text.slice(from + startTag.length, to).replace(/^\n|\n$/g, "");
+      const wanted = gen().replace(/^\n|\n$/g, "");
+      if (current === wanted) continue;
+
+      if (mode === "write") {
+        text = `${text.slice(0, from + startTag.length)}\n${wanted}\n${text.slice(to)}`;
+        writeFileSync(path, text);
+        console.log(`  ${file}: block "${name}" regenerated`);
+        continue;
+      }
       problems++;
-      continue;
+      console.error(`\n  ${file}: block "${name}" is STALE.`);
+      const a = current.split("\n");
+      const b = wanted.split("\n");
+      const at = a.findIndex((l, i) => l !== b[i]);
+      console.error(`    first difference at line ${at + 1} of the block:`);
+      console.error(`      in the file:  ${a[at] ?? "(missing)"}`);
+      console.error(`      generated:    ${b[at] ?? "(missing)"}`);
     }
-    if (gen === undefined) {
-      console.error(
-        `  ${file}: block "${name}" names no generator. Known: ${Object.keys(GENERATORS).join(", ")}`,
-      );
-      problems++;
-      continue;
-    }
-    blocks++;
-    const current = text.slice(from + startTag.length, to).replace(/^\n|\n$/g, "");
-    const wanted = gen().replace(/^\n|\n$/g, "");
-    if (current === wanted) continue;
-
-    if (mode === "write") {
-      text = `${text.slice(0, from + startTag.length)}\n${wanted}\n${text.slice(to)}`;
-      writeFileSync(path, text);
-      console.log(`  ${file}: block "${name}" regenerated`);
-      continue;
-    }
-    problems++;
-    console.error(`\n  ${file}: block "${name}" is STALE.`);
-    const a = current.split("\n");
-    const b = wanted.split("\n");
-    const at = a.findIndex((l, i) => l !== b[i]);
-    console.error(`    first difference at line ${at + 1} of the block:`);
-    console.error(`      in the file:  ${a[at] ?? "(missing)"}`);
-    console.error(`      generated:    ${b[at] ?? "(missing)"}`);
   }
-}
 
-if (mode === "write") {
-  console.log(`generated-blocks: ${blocks} block(s) checked.`);
-  process.exit(0);
-}
-if (problems === 0) {
-  console.log(`generated-blocks: OK - ${blocks} block(s) match their generators.`);
-  process.exit(0);
-}
-console.error("");
-console.error(
-  `  ${problems} problem(s). Run \`pnpm blocks:write\` and read the diff before committing:`,
-);
-console.error(
-  "  a changed number is either a real result or a regression, and the block cannot tell.",
-);
-process.exit(1);
+  if (mode === "write") {
+    console.log(`generated-blocks: ${blocks} block(s) checked.`);
+    process.exit(0);
+  }
+  if (problems === 0) {
+    console.log(`generated-blocks: OK - ${blocks} block(s) match their generators.`);
+    process.exit(0);
+  }
+  console.error("");
+  console.error(
+    `  ${problems} problem(s). Run \`pnpm blocks:write\` and read the diff before committing:`,
+  );
+  console.error(
+    "  a changed number is either a real result or a regression, and the block cannot tell.",
+  );
+  process.exit(1);
+};
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) main();

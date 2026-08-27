@@ -9,7 +9,7 @@ to lose.
 
 **Do not deploy this as a defence.** Its two failures are structural rather than fixable:
 
-- **Silent attacks**: 0 of 34 caught, across every split. A false statement of fact, a URL that
+- **Silent attacks**: it catches none of the 99 silent attacks in the corpus, across every split. A false statement of fact, a URL that
   carries data outward, an instruction split across two retrieved chunks — there is nothing in the
   text to find.
 - **Quoted attacks**: 3 of 6 benign holdout cases over-blocked. A security ticket discussing a

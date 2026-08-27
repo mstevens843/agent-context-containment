@@ -30,7 +30,7 @@ numbers about nothing.
 | exact imports rebuild | `pnpm import:check` | 62/62 byte-identical from pinned upstream rows |
 | capability manifests | `pnpm verify:manifests` | 0 contradictions in every table |
 | **freeze** | `pnpm verify:freeze` | **exits 1.** Unavailable, not pending |
-| lint | `pnpm lint` | clean |
+| lint | `pnpm lint` | clean. **If you run `pnpm lint:fix`, run `pnpm blocks:write`, then `pnpm report:markdown`, then the checks** — reformatting changes the LOC counts the generated blocks report, so a fix-then-check order leaves `blocks:check` red on numbers nobody typed |
 | typecheck | `pnpm typecheck` | 9 tasks, `src` and `test` configs |
 | build | `pnpm build` | 5 packages |
 | test | `pnpm test` | all passing |
@@ -39,8 +39,9 @@ numbers about nothing.
 | async ledger proof | `pnpm prove:asyncledger` | logic proven; database **SKIPPED / NOT PROVEN** without `DATABASE_URL` |
 | model judge | `pnpm judge:model` | prints `skipped`, exits 0 |
 | **generated blocks match their generators** | `pnpm blocks:check` | four passes shipped a stale number before this existed |
+| **the generated report is current** | `pnpm report:check` | `docs/REPORT.md` is a committed copy of `pnpm report:markdown` output, and `blocks:check` never covered it — it watches GENERATED markers inside hand-written documents, and that file has none |
 | **claim registry** | `pnpm audit:claims` | every PROVEN claim names a test AND a negative control |
-| **mutation audit** | `pnpm audit:mutations` | 8/8 — deleting any listed fix fails a test |
+| **mutation audit** | `pnpm audit:mutations` | **21/21 caught** — deleting any listed fix fails a test |
 | **the prose guard can fail** | `pnpm audit:docs` | injects a false claim and requires it to be caught |
 | examples | `examples/*.ts`, `examples/agents/all.ts` | all run |
 | playground matrix | `npx tsx examples/playground.ts --matrix --role sink_identity` | runs |

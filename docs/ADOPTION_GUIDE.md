@@ -176,4 +176,5 @@ lists loosenings first and separately.
 - It works from **declarations you write**. Wrong declarations are a config and supply-chain risk, and
   the cost is measured: `pnpm report:mapping`.
 - The numbers in `README.md` come from `pnpm report`. Run it against your own corpus; five profiles
-  and 98 cases is a starting point, not a recommendation for your deployment.
+  and 130 hand-written and imported cases are a starting point, not a recommendation for your
+  deployment.

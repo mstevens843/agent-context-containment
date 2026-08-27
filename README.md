@@ -363,7 +363,8 @@ scripts whose own README states they are not production-ready.
 The contribution here is four things, none of them the idea:
 
 1. **An implementation** - a pure, zero-dependency policy engine in TypeScript.
-2. **An attack corpus** - 24 cases, with paired benign controls and out-of-scope cases counted.
+2. **An attack corpus** - 130 hand-written and imported cases, with paired benign controls and
+   out-of-scope cases counted.
 3. **An eval harness** - runnable against a third party's policy through a one-method port, grading
    mechanism rather than verdict, with mutants proving it discriminates.
 4. **A developer-facing policy model** - the two-axis capability table and per-argument-role
@@ -454,7 +455,7 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **633 tests across five packages.**
+the pure core grows a clock or an import. **655 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through

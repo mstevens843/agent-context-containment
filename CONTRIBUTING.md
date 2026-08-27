@@ -84,9 +84,15 @@ stop the project overstating itself, and until v1.0 none of it ran in CI. The re
 §19. `packages/conformance/test/claimregistry.test.ts` now asserts that this job still names each
 gate, so deleting a step fails the suite instead of quietly reducing coverage.
 
-`prove:postgres` is deliberately absent from CI: no `DATABASE_URL` means it would report
-`SKIPPED / NOT PROVEN` and exit 0, which is a green step proving nothing - the exact shape the job
-exists to catch. The concurrency claim is graded `SKIPPED` for the same reason.
+`prove:postgres` runs in CI in its own `postgres-proof` job, against a real `postgres` service
+container. It was absent for several releases, and the reason was sound as far as it went: with no
+`DATABASE_URL` the script reports SKIPPED / NOT PROVEN and **exits 0**, so an unconditioned step is a
+green tick that reached no database. The answer to that is a real database, not silence. The job
+greps its own output for the PROVEN line, because a misconfigured service container would otherwise
+turn it green the same way.
+
+A local `pnpm test` still does not run it — it needs a database — so a default local run reports
+SKIPPED / NOT PROVEN, and that is the honest result for that run.
 
 ## The frozen holdout
 
@@ -176,6 +182,25 @@ retype the number, which is the same act that produced the error.
 Never hand-edit between the markers. `pnpm blocks:write` regenerates, `pnpm blocks:check` verifies,
 and CI runs the check. Blocks are for tables; the claim registry is for sentences. Both exist because
 neither covers the other.
+
+**Order matters after `pnpm lint:fix`.** Some blocks count lines of source, test and script code, so
+reformatting moves them. Run:
+
+```
+pnpm lint:fix
+pnpm blocks:write      # the LOC counts lint:fix just changed
+pnpm report:markdown   # docs/REPORT.md reads the tables blocks:write just rewrote
+pnpm blocks:check      # now they can pass
+pnpm report:check
+```
+
+`docs/REPORT.md` is a committed copy of generated output and needs the same discipline. It is NOT
+covered by `blocks:check`, which watches `GENERATED` markers inside hand-written documents — that
+file has none, so it went unchecked entirely until `pnpm report:check` existed.
+
+Doing it the other way round leaves `blocks:check` red on numbers nobody typed, and the natural
+reaction — re-running the check — never helps. Not a defect in either command; an ordering rule that
+was learned the hard way twice in one pass and written down the second time.
 
 ## `pnpm verify:freeze` exits 1, and that is not a bug to fix
 

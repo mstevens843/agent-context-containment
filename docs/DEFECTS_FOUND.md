@@ -869,7 +869,7 @@ exists, or a package script — and every entry was re-anchored.
 
 ### The 30 unguarded branches
 
-`scripts/audit-mutations.mjs` reports 15/15 caught. That is 15 branches somebody thought to list. A
+`scripts/audit-mutations.mjs` reports 21/21 caught. That is 21 branches somebody thought to list. A
 sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
 no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
 in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
@@ -2189,3 +2189,311 @@ either.** Sections 34 through 36 each ended by noting that only a reader told to
 defects. The correction is that such a reader is a source of hypotheses, and the measurement is what
 makes them findings. Two of the numbers in this section exist because a claim was checked instead of
 believed.
+
+## 38. Half a report nobody registered, a control standing in for one it could not be, and two guards that could not see their own defect
+
+A claim-hygiene pass. The engine is not implicated anywhere in this section.
+
+### The robust half of the mapping report was never a registered fact
+
+`pnpm report:mapping` states two things about each imported split: how many cases are **robust** to a
+peer's capability mapping, and how many **break** when the tool is understated. The broken half has
+been a registered fact since section 30 — computed, pattern-matched, negative-controlled.
+
+The robust half was registered nowhere. So:
+
+| document | said | truth |
+|---|---|---|
+| `docs/LIMITATIONS.md` row 2 | **6/6 robust** | 30/30 direct-harm robust, 32/32 data-stealing robust |
+| `STATUS.md` "four of those numbers are new" | **6/6 robust, 4/6 broken** | 30/30 direct-harm robust and 32/32 data-stealing robust; 21 of 30 and 32 of 32 broken |
+
+Both survived three releases and every gate, in a repository whose whole argument is that numbers
+should be computed rather than remembered. Section 18 is the same defect; section 30 fixed it for the
+mis-declaration numbers and did not look at their counterpart in the same report. **Half of one report
+was held to one standard and half to another, and nothing in the tree could tell.**
+
+`direct-harm robust` and `data-stealing robust` are registered facts now, with denominators read from
+the data, four controls, and a refusal to run if either becomes unreadable rather than reporting `-1`
+and blaming every document that mentions it.
+
+### The two facts collided, while being fixed
+
+The first robust pattern matched the **broken** fraction too — both are written `N/30`, and a document
+naturally states them in one sentence. It reported 21 against a value of 30 and named the sentence
+that had just been corrected as the stale one. That is section 30's collision, reproduced inside its
+own fix. The robust patterns now require the word `robust` after the noun and the mis-declaration
+patterns carry a negative lookahead refusing it, so neither can read the other's sentence. A test
+states both facts in one sentence and requires a clean run.
+
+### Two more stale current-state numbers, both defeated by markdown bolding
+
+- the `STATUS.md` inventory's `Corpus` row, in the table headed *"Counted, not remembered"*, gave the
+  count as 98. Truth: 130.
+- `docs/ADOPTION_GUIDE.md`: *"five profiles and 98 cases is a starting point"*. Truth: 130.
+
+The registered pattern was `/\b(\d+)\s+hand-written and imported/`, and the document writes
+`**130** hand-written and imported`. A plain `\s+` cannot cross the `**`, so the pattern matched
+nothing and the cell was never checked. The imported-cases and mis-declaration patterns had each
+already needed exactly this widening, for exactly this reason, and it was not applied here.
+
+A third, found the same way: `RELEASE_CHECKLIST.md` still graded the mutation audit **8/8** when it is
+15/15, because `8/8 —` matches neither registered mutation pattern.
+
+### The adversary report's control could not test what it licensed
+
+The receipt search's claim is about receipt **binding**. Its negative control raised every ceiling and
+judged the engine against the shipped table — which produces real findings (measured: 347 at 3,000
+iterations, and zero against its own table, so not a tautology), but every one of them is a **ceiling**
+breach. An engine whose ceilings admit everything never needs a receipt, so that control cannot reach
+binding at all. It was named "the negative control", singular, and stood in for one it could not be.
+
+`everyRuleLiftsPolicy` is the missing half: it accepts every declassification rule while leaving
+ceilings **exactly as shipped**, so arguments are still over their ceiling, a receipt is still
+required, and only the engine's judgement about which rules a row lifts by is broken. Measured at
+5,000 iterations on seed `0xc0ffee`: **872 findings** (563 `wrong_admission`, 309 `under_block`) against
+the shipped table, **0** against its own.
+
+`pnpm adversary` now prints three controls under their own names — CEILING, BINDING, and MALFORMED —
+and says what each one does and does not prove. MALFORMED has **no runnable control in this process**,
+and the report says so rather than inventing one: structural validity does not depend on the table, so
+no policy this script can build makes the engine mishandle it (measured: a loosened table gives that
+search zero findings). Its control is the mutation audit, named in the output.
+
+### The mapping audit printed 32 rows with no column separator
+
+Every data-stealing row read `ia-imp-ds-001email_send=declass`. The column widths were literals sized
+when every id looked like `ia-imp-001`; `ia-imp-ds-001` is three characters longer. Widths are measured
+from the data now.
+
+### And the guard written for that defect could not see that defect
+
+The first version asserted `/^ {2}\S+\s{2,}\S/` on each row — *"an id, then whitespace, then the next
+column"*. A collided row satisfies it: `\S+` simply swallows `ia-imp-ds-001email_send=declass` and
+matches the gap after **that**. Watched against the old literal width, the test stayed green.
+
+The same shape appeared twice more in this pass:
+
+- the two "a wrong robust number is caught" controls asserted only that the run failed and that the
+  fact's **name** appeared in the output. With both robust patterns emptied, the sentence goes
+  unregistered, the ratchet breaks, the run fails anyway, and the fact is still listed in the survey
+  table — so both tests passed against a registry that had stopped checking anything. They key on the
+  `STALE` line and the reported value now.
+- and a scope test in section 37 walked the findings of a **clean** run, which has none.
+
+**Three controls in one pass that passed for the wrong reason**, each caught only by deleting the fix
+and watching. Writing the test is not the check; watching it fail is. Every control added in this
+section was watched against the defect it names, and three of them were rewritten after that watching
+showed they were green when they should not have been.
+
+### Two rules the pass produced
+
+- **`pnpm lint:fix` staleness the generated blocks.** Reformatting moves the LOC counts the blocks
+  report, so `lint:fix` → `blocks:check` is always red on numbers nobody typed, and re-running the
+  check never helps. The order is `lint:fix`, then `blocks:write`, then `blocks:check`. Written into
+  `CONTRIBUTING.md` and the release checklist after being learned twice in one pass.
+- **A fixed column width is a claim about data the table does not control.** So is a hard-coded
+  denominator, which section 28 already recorded. Both were literals that stopped matching reality
+  the moment the corpus grew.
+
+## 39. Comments that outlived their measurements, a sweep whose zero was about the sweep, and a generated file no gate read
+
+A claim-hygiene pass. Nothing here is an engine defect; everything is a claim the tree made about
+itself and could not support.
+
+### Two comments still asserting figures section 37 had already retracted
+
+`packages/conformance/test/receiptadversary.test.ts` opened by stating **902 / 589 / 593** for
+reuse-in-one-action, the role half of receipt binding, and expiry. Section 37 measured those as
+**1,232 / 887 / 902** and recorded that the originals were published with no seed and did not
+reproduce. The header went on stating them anyway, three sections later, at the top of the file the
+correction was about.
+
+It carries no figures now. A number copied into a comment is a number nothing re-checks, and this file
+has now demonstrated that twice. The table lives in section 37 with its seed and iteration count, and
+`pnpm audit:mutations` re-derives the evidence.
+
+### The P05 sweep's zero was a fact about the sweep, and the test said otherwise
+
+`packages/core/test/unguarded.test.ts` held a block titled *"the one-receipt-one-slot guard is
+unreachable"*, asserting the guard fires zero times and telling a future reader that it *"has been
+unreachable since v0.9"*. Sections 34 and 37 established it is reachable and made it a mutation entry.
+The test kept saying otherwise.
+
+The reason the sweep sees zero is structural, and worth stating exactly:
+
+- every call in it passes **one** receipt object, `[r]`
+- the guard sits **after** slot matching in `coverFor`, so a receipt reaches it only by matching a
+  second argument's slot
+- `slotsOf` keeps slots unique, so one receipt matches at most one of them
+
+So the sweep **cannot** reach the guard, whatever it finds. **Two** receipt objects sharing one id do:
+the first is spent on slot one, the second matches slot two, and `usedReceipts` already holds the id.
+Verified directly, and generated by the `reused_in_action` shape in the receipt search.
+
+The sweep is kept — its first test is the load-bearing §11 invariant — retitled to say what it
+establishes, with the false claim removed from the failure message and **a new test asserting the
+positive case**. That test's absence is what let the "unreachable" reading stand for three releases:
+without it, the zero reads as a statement about the engine.
+
+### Six branch figures that were measured once and never again
+
+Section 37 published findings counts for ten branches of `coverFor`. Four had mutation entries. The
+other six — the label-binding fallback, expiry, the role half, source binding, the lift level, and
+`liftableBy` — were numbers taken once, by hand, and never re-derived. That is the state the
+mis-declaration figures were in before section 30 and the robust figures before section 38: **a
+measurement nothing re-runs is a claim, not evidence.**
+
+All six are mutation entries now — `receipt-label-binding`, `receipt-expiry`, `receipt-role-binding`,
+`receipt-source-binding`, `receipt-lift-level`, `receipt-rule-liftable`. The audit runs 21 entries in
+about 50 seconds and all 21 are caught by tests rather than by the build.
+
+Two of them are deliberately shaped so a weaker test cannot satisfy them: `receipt-role-binding`
+deletes **half** a condition, leaving the capability check in place, so noticing a cross-capability
+receipt is not enough; `receipt-source-binding` **inverts** rather than disables, so the branch still
+runs and a coverage tool cannot be what catches it.
+
+### `docs/REPORT.md` is generated, committed, and was read by nothing
+
+`pnpm blocks:check` watches `GENERATED` markers **inside hand-written documents**. `docs/REPORT.md` is
+a whole file of generated output and has no markers, so it fell outside that gate entirely and could
+sit stale indefinitely with every gate green. It drifted during section 38 and was caught by eye,
+which is not a control.
+
+`pnpm report:check` renders the same markdown and compares, naming the first differing line. It is a
+CI gate now, and the release checklist and `CONTRIBUTING.md` carry the order that makes it pass:
+`lint:fix` → `blocks:write` → `report:markdown` → the checks. Two of those three orderings were
+learned by hitting them.
+
+### Sixteen unregistered README numbers, closed by four facts
+
+`verify:numbers` reported 95 unregistered numeric statements. Four of the highest-value ones were
+already computed by commands that run on every pass and simply had no pattern: the generated-variant
+count, the `tuning` split size, the policy-surface cell count, and the generated agent runs. Each is
+quoted as a headline and each was enforced only by the ratchet's total.
+
+Registering four facts removed **sixteen** statements from that pile — each fact guards several
+sentences — and the ratchet moved 95 → 79. The agent-run count is **summed from the report's rows**
+rather than read from a total line, because the report prints none, and a hand-typed 48 sitting next
+to six rows of 8 is precisely the arithmetic that goes stale in silence.
+
+Each has a negative control keyed on the `STALE` line **and the reported value**, not on the fact's
+name — the weakness section 38 found in its own robust controls, avoided this time rather than
+discovered afterwards.
+
+### What is left, and named rather than implied
+
+79 unregistered numeric statements remain across nine release-facing documents. Most are in
+`README.md`, and most are genuinely un-computable from any command here: comparisons with published
+work, historical version-history columns, and figures about the classifier baseline. The ratchet
+counts them and refuses to let the total grow. That is a bound, not coverage, and this file has said
+so since section 16.
+
+## 40. Six stale numbers behind an unread pile, a fake-green argument that outlived its own fix, and a comment that was the last holdout
+
+A release-hardening pass over the unregistered-number surface. Nothing here is an engine defect.
+
+### The pile was hiding stale numbers, not just unchecked ones
+
+`verify:numbers` reported 79 unregistered numeric statements and printed **twelve of them**. The rest
+were a count. Going through the whole list — which required adding `--all`, because the previous pass
+resorted to copying the script elsewhere to read past the sample — turned up **six numbers that were
+not merely unregistered but wrong**:
+
+| document | said | truth |
+|---|---|---|
+| `STATUS.md`, imported split description | direct harm 17, data stealing 17 | 30 and 32 |
+| `STATUS.md`, current Checks table | the exact-imports row read 34 | 62 |
+| `STATUS.md`, version-history row, final cell | 34 | 62 |
+| `STATUS.md`, claim-registry row | `claims.json` holds the 20 | 27 |
+| `README.md`, the contribution list | an attack corpus of 24 cases | 130 |
+| `packages/classifier/README.md` | 0 of 34 silent attacks caught | 0 of 99 |
+
+Every one sat in a release-facing document through several passes. The lesson is not that the ratchet
+failed — it counted all of them — it is that **a report that shows a sample of a pile is a report
+nobody reads to the bottom**, and the stale entries were indistinguishable from the noise while they
+stayed inside it. `--all` exists now, and this is the first pass that read the whole list.
+
+Two further lines were correct but read as current when they described an old release: a per-split
+breakdown from v0.7 (`tuning` 25, `imported` 34) and a v0.8 closure note. Both are labelled with the
+release they describe and point at the generated block for current numbers. `docs/EVALS.md` turned out
+to hold a whole pasted `pnpm report` block from v0.6 — `tuning` at 19, with the `adaptive` and
+`imported` rows not yet existing — presented with no indication it was a snapshot. It is labelled now,
+and the fractions retyped beneath it are gone.
+
+### Eleven facts registered, and one of them collided on the way in
+
+Registered: the generated-variant count, the `tuning` split size, the policy-surface cell count, the
+agent-run count, the hand-authored provenance count, the release-valve cell count, the agent-run
+scenario count, and the silent-attack denominator; plus new phrasings for the imported count, the
+registry size, the manifest fraction, the holdout size, and the mis-declaration fractions where the
+noun follows the number rather than preceding it.
+
+Rewriting the classifier's score as `0/99` made the **`silent attacks contained`** pattern read that
+`0` as its own value. Two facts about one table sharing a sentence shape — **section 30's collision,
+for the third time**, after section 38 hit it between the robust and mis-declaration figures. The
+denominator now demands `N silent attacks in the corpus` and the containment patterns demand a
+fraction, so neither can read the other's sentence.
+
+Every new fact has a negative control keyed on the `STALE` line **and the reported value**, and one
+shared near-miss states all of them in a single document and requires a clean run — which is what
+catches a collision like that.
+
+Also fixed: the exemption for defect-section references matched `sections 19 and 40` as far as the
+`19` and reported the `40` as an unregistered claim. The obvious response to that is to delete the
+cross-reference, which loses a link to satisfy a checker. Ranges and conjunctions are exempt now.
+
+The ratchet moved **79 → 56**, tightened only after each drop was observed.
+
+### The fake-green argument was right, and had stopped being a reason
+
+`prove:postgres` ran nowhere in CI, and a test asserted it must stay that way. The reasoning was
+sound: with no `DATABASE_URL` the script reports SKIPPED / NOT PROVEN and **exits 0**, so an
+unconditioned step is a green tick that reached no database — the failure mode this repository is
+mostly about.
+
+But the alternative to a fake green is **a real database, not silence.** A `postgres` service
+container costs one job. The `postgres-proof` job now applies the schema and runs every scenario plus
+the read-then-write control on two independent connections, on every push and pull request.
+
+It carries its own control, because the original hazard is still real: the job greps its output for
+the PROVEN line, since a misconfigured container would otherwise turn it green exactly as an unset
+`DATABASE_URL` would.
+
+The test that pinned "postgres must stay out" now states the property it was always protecting — *if
+CI runs the proof, a `DATABASE_URL` must be in scope and the job must refuse a run that reached no
+database* — rather than a proxy for it. Stating a rule as the absence of a thing made the absence look
+like the goal.
+
+`postgres-concurrency` moves **SKIPPED → PROVEN**, because the condition it lacked was supplied rather
+than waived. **What is still not proven, and the script says so on every run: that YOUR hosts share
+ONE database.** That is a fact about infrastructure that nothing here can reach, which is why
+`sharedAcrossHosts` is a question the adapter asks the caller. A local `pnpm test` still does not run
+it, still reports SKIPPED / NOT PROVEN, and `postgres-without-url` remains the claim about that.
+
+### The engine's own comment was the last file asserting the old P05 disposition
+
+`packages/core/src/policy.ts` still said the one-receipt-one-slot guard was "currently unreachable"
+and "confirmed-dead in §20" — corrected in §34, re-measured in §37, and retitled in the tests in §39,
+while the comment beside the branch went on stating it. The same paragraph had already corrected
+itself twice on other grounds, which is its own kind of warning.
+
+The narrow truth is now written where the branch is: a **single receipt object** cannot reach it,
+because slot uniqueness means one object matches at most one slot; **two objects sharing one id** do.
+`unguarded.test.ts` asserts all three halves, the third having been the missing one.
+
+### What remains, and why
+
+**56 unregistered numeric statements.** They fall into four kinds and none is a candidate for a fact:
+
+- **External comparisons** — CaMeL's 77-versus-84 on AgentDojo. Not ours to recompute, and attributed
+  wherever it appears.
+- **Version history** — the per-release table and the closure notes. Cannot drift; a past number stays
+  true.
+- **Classifier-baseline fractions on the frozen holdout** — `0/6`, `6/6`, `3/6`. Computable in
+  principle, but each is one cell of one row, and the holdout is frozen by manifest so they cannot
+  move without CI noticing first. Registering a dozen facts to guard a frozen file would be motion.
+- **Illustrative figures** — four hundred payments of 9.99 under a cap of 10; a $5,000 wire. Examples,
+  not measurements.
+
+The ratchet counts all of them and refuses to let the total grow. **That is a bound, not coverage**,
+and it has said so since section 16.

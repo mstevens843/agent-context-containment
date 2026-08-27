@@ -16,7 +16,14 @@
 export const NOT_A_CLAIM = [
   [/\bv?\d+\.\d+(?:\.\d+)?\b/g, "version strings: v1.0, 0.9.2"],
   [/§\s*\d+/g, "defect section references"],
-  [/\bsections?\s+\d+/gi, "'section 15' - the same reference spelled out"],
+  // A LIST OF SECTIONS IS STILL A LIST OF SECTION REFERENCES. This matched only the FIRST number,
+  // so "sections 19 and 40" exempted the 19 and reported the 40 as an unregistered numeric claim -
+  // and the fix a reader would reach for is to delete the reference, which loses a cross-link to
+  // satisfy a checker. Ranges and conjunctions are the ordinary way to cite two sections.
+  [
+    /\bsections?\s+\d+(?:\s*(?:,|and|to|through|[-\u2013\u2014])\s*\d+)*/gi,
+    "'section 15', 'sections 15 to 19', 'sections 19 and 40'",
+  ],
   [/\b(?:19|20)\d{2}\b/g, "years"],
   [/\bnode-version:\s*\d+/g, "CI toolchain pin"],
   [/\$\d+/g, "SQL placeholders"],

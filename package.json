@@ -47,7 +47,8 @@
     "verify:corpus": "bash scripts/verify-corpus.sh",
     "verify:freeze": "bash scripts/verify-freeze.sh",
     "verify:manifests": "node scripts/manifest-report.mjs",
-    "verify:numbers": "node scripts/verify-numbers.mjs"
+    "verify:numbers": "node scripts/verify-numbers.mjs",
+    "report:check": "node scripts/report.mjs --check"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

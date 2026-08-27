@@ -14,6 +14,8 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+// @ts-expect-error - a plain .mjs script helper, deliberately not part of any package's build
+import { parseTestCountsForBlock } from "../../../scripts/generated-blocks.mjs";
 // @ts-expect-error - a plain .mjs helper, deliberately not part of any package's build
 import { numericClaims, scanDocument } from "../../../scripts/lib/numeric-noise.mjs";
 
@@ -34,6 +36,41 @@ const REENTRANT = process.env.CONTAINMENT_VERIFY_NUMBERS === "1";
  */
 const CEILING_LINE =
   /const MAX_UNREGISTERED = Number\(process\.env\.CONTAINMENT_MAX_UNREGISTERED \?\? (\d+)\);/;
+
+describe("the generated test-count block reads CI output honestly", () => {
+  it("parses scoped Turbo package prefixes", () => {
+    expect(
+      parseTestCountsForBlock(
+        [
+          "@agent-context-containment/core:test:       Tests  266 passed (266)",
+          "@agent-context-containment/conformance:test:       Tests  280 passed (280)",
+          "@agent-context-containment/ledger:test:       Tests  89 passed (89)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      ["conformance", 280],
+      ["core", 266],
+      ["ledger", 89],
+    ]);
+  });
+
+  it("refuses a red suite instead of summing the packages that happened to pass", () => {
+    expect(() =>
+      parseTestCountsForBlock(
+        [
+          "@agent-context-containment/core:test:       Tests  1 failed | 265 passed (266)",
+          "@agent-context-containment/ledger:test:       Tests  89 passed (89)",
+        ].join("\n"),
+      ),
+    ).toThrow(/test was red/);
+  });
+
+  it("does not accept output with no per-package test summaries", () => {
+    expect(() => parseTestCountsForBlock("Tasks: 5 successful, 5 total")).toThrow(
+      /could not parse per-package test counts/,
+    );
+  });
+});
 
 describe("what the scanner counts as a numeric claim", () => {
   it("counts a bare count and an N-of-M pair", () => {
@@ -161,6 +198,160 @@ describe("verify:numbers can fail, proven without touching a release document", 
     try {
       const { failed, out } = runFast(doc);
       expect(failed, `a CORRECT registered number was reported stale:\n${out}`).toBe(false);
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  // ---- the robust half of the mapping report -----------------------------------------------------
+  //
+  // WHY THIS PAIR EXISTS. `pnpm report:mapping` states two things about each imported split: how many
+  // cases are robust to a peer's capability mapping, and how many break when the tool is understated.
+  // The BROKEN half has been a registered fact since section 30. The ROBUST half was registered
+  // nowhere, so `docs/LIMITATIONS.md` published **6/6 robust** and `STATUS.md` **6/6 robust, 4/6
+  // broken** for three releases after the split grew to 30 and 32 - through every gate, every pass.
+  // Half of one report was computed and checked; the other half was typed and trusted.
+  //
+  // These two tests are the control that half now has. See DEFECTS_FOUND.md section 38.
+
+  it("a wrong robust number is caught, and named", () => {
+    const doc = join(tmpdir(), "acc-robust-wrong.md");
+    writeFileSync(doc, "Peer mappings leave 6/30 direct-harm robust on that split.\n");
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `a wrong robust fraction passed:\n${out}`).toBe(true);
+      // THE STALE LINE, not the fact's name. Asserting the name alone passes when the pattern is
+      // EMPTY: the sentence then goes unregistered, the ratchet breaks, `failed` is true anyway, and
+      // the fact still appears in the survey table above. Watched: with both robust patterns removed
+      // this test stayed green. Only the staleness report can produce the sentence below.
+      expect(out).toContain("STALE");
+      expect(out).toContain("direct-harm robust: the document says 6");
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("a wrong data-stealing robust number is caught, and named", () => {
+    const doc = join(tmpdir(), "acc-robust-ds-wrong.md");
+    writeFileSync(doc, "Peer mappings leave 6/32 data-stealing robust on that split.\n");
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `a wrong data-stealing robust fraction passed:\n${out}`).toBe(true);
+      expect(out).toContain("STALE");
+      expect(out).toContain("data-stealing robust: the document says 6");
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("the CORRECT robust numbers do not fail, so the two above mean something", () => {
+    // The near-miss: a pattern that flagged every robust sentence would pass both tests above.
+    const doc = join(tmpdir(), "acc-robust-right.md");
+    writeFileSync(
+      doc,
+      "Peer mappings leave 30/30 direct-harm robust and 32/32 data-stealing robust.\n",
+    );
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `the CORRECT robust fractions were reported stale:\n${out}`).toBe(false);
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("the robust and mis-declaration facts do not read each other's sentence", () => {
+    // THE COLLISION THIS PAIR NEARLY SHIPPED WITH. Both facts describe one split and both are written
+    // `N/30`, so a document states them in one sentence. The first robust pattern matched the broken
+    // fraction too, reported 21 against a value of 30, and named the sentence that had just been
+    // CORRECTED as the stale one - section 30's failure, reproduced while fixing its sibling.
+    const doc = join(tmpdir(), "acc-robust-both.md");
+    writeFileSync(
+      doc,
+      "30/30 direct-harm robust and 32/32 data-stealing robust, with 21 of 30 direct-harm and " +
+        "32 of 32 data-stealing broken by an understated tool.\n",
+    );
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `both facts in one sentence were misread:\n${out}`).toBe(false);
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  // ---- the four facts registered in section 39 -----------------------------------------------------
+  //
+  // Each was an unregistered README headline, enforced only by the ratchet's total. A fact with no
+  // control is a pattern nobody has watched fire, which is section 16's shape - so each gets one, and
+  // a shared near-miss proves the four together do not simply flag every document.
+  const REGISTERED = [
+    [
+      "generated variants",
+      "The suite builds 999 generated laundering variants at run time.",
+      "648 generated laundering variants",
+    ],
+    ["tuning cases", "| `tuning` (999) | freely editable |", "| `tuning` (29) | freely editable |"],
+    [
+      "policy surface cells",
+      "All 999 policy cells were probed.",
+      "All 400 policy cells were probed.",
+    ],
+    [
+      "generated agent runs",
+      "It reports 999 generated agent runs.",
+      "It reports 48 generated agent runs.",
+    ],
+    // Section 40's four. `silent attacks total` needed its OWN phrasing: stating the classifier's
+    // score as `0/99` made the `silent attacks contained` pattern read that 0 as its value - two
+    // facts about one table sharing a sentence shape, section 30's collision for the third time. The
+    // near-miss below states every one of these in a single document and requires a clean run, which
+    // is exactly what catches that.
+    [
+      "silent attacks total",
+      "There are 999 silent attacks in the corpus.",
+      "There are 99 silent attacks in the corpus.",
+    ],
+    [
+      "hand-authored cases",
+      "| **Everything else** | 999 cases, mine |",
+      "| **Everything else** | 59 cases, mine |",
+    ],
+    [
+      "release-valve cells",
+      "999 admit it into a payload or selector.",
+      "40 admit it into a payload or selector.",
+    ],
+    [
+      "agent-run scenarios",
+      "There are 999 multi-step scenarios.",
+      "There are 5 multi-step scenarios.",
+    ],
+  ] as const;
+
+  for (const [id, wrong] of REGISTERED) {
+    it(`a wrong \`${id}\` is caught, and named`, () => {
+      const doc = join(tmpdir(), `acc-${id.replace(/\W+/g, "-")}.md`);
+      writeFileSync(doc, `${wrong}\n`);
+      try {
+        const { failed, out } = runFast(doc);
+        expect(failed, `a wrong ${id} passed:\n${out}`).toBe(true);
+        // THE STALE LINE AND THE VALUE, not the fact's name: the name alone appears in the survey
+        // table on every run, so asserting it passes even against an empty pattern. That exact
+        // weakness shipped in the robust controls above and is recorded in section 38.
+        expect(out).toContain("STALE");
+        expect(out).toContain(`${id}: the document says 999`);
+      } finally {
+        rmSync(doc, { force: true });
+      }
+    });
+  }
+
+  it("and the CORRECT values for all four do not fail, so the four above mean something", () => {
+    // The shared near-miss. Four checkers that flagged every document would pass every test above.
+    const doc = join(tmpdir(), "acc-registered-right.md");
+    writeFileSync(doc, `${REGISTERED.map(([, , right]) => right).join("\n\n")}\n`);
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `the CORRECT values were reported stale:\n${out}`).toBe(false);
     } finally {
       rmSync(doc, { force: true });
     }
@@ -355,7 +546,7 @@ describe("the ratchet can be tightened, and cannot be loosened quietly", () => {
 
   it("the override cannot raise what ships", () => {
     // The hook exists for these tests. If it could move the shipped bound it would be a bypass.
-    expect(readFileSync(SCRIPT, "utf8")).toContain("CONTAINMENT_MAX_UNREGISTERED ?? 100");
+    expect(readFileSync(SCRIPT, "utf8")).toMatch(CEILING_LINE);
   });
 });
 

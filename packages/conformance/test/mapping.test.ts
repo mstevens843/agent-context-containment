@@ -283,3 +283,46 @@ describe("imported-case mapping audit", () => {
     expect(out).toContain("strings in these cases are upstream's");
   });
 });
+
+describe("the audit table stays readable as ids grow", () => {
+  // WHY THIS IS A TEST. The column widths were literals sized when every case id looked like
+  // `ia-imp-001`. Importing the data-stealing split brought `ia-imp-ds-001` - three characters
+  // longer - and all 32 rows printed `ia-imp-ds-001email_send=declass`, with no separator at all.
+  // Nothing failed, because no gate reads the table's shape. See DEFECTS_FOUND.md §38.
+  const table = formatSensitivity(results());
+  const rows = table
+    .split("\n")
+    .filter((l) => /^ {2}\S/.test(l) && /=/.test(l) && !l.includes("ROBUST"));
+
+  it("emits a row per case, so the assertions below are not walking an empty set", () => {
+    expect(rows.length).toBeGreaterThan(50);
+  });
+
+  it("every id is followed by whitespace, not by the next column", () => {
+    // ANCHORED ON THE KNOWN IDS, and the first version was not. It asserted `/^ {2}\S+\s{2,}\S/`,
+    // which a COLLIDED row satisfies: `\S+` simply swallows `ia-imp-ds-001email_send=declass` and
+    // matches the gap after it. Watched against the old literal width, that test stayed green - a
+    // guard written for a specific defect that could not see that defect. Only comparing against the
+    // ids the data actually carries distinguishes the two layouts.
+    const ids = results().map((r) => r.id);
+    expect(ids.length, "no ids to check").toBeGreaterThan(50);
+    for (const id of ids) {
+      const row = rows.find((l) => l.startsWith(`  ${id}`));
+      expect(row, `no row for ${id}`).toBeDefined();
+      expect(
+        row?.slice(2 + id.length, 2 + id.length + 2),
+        `columns collided for ${id}: ${row}`,
+      ).toBe("  ");
+    }
+  });
+
+  it("the widest id sets the column, so a longer id cannot collide either", () => {
+    // The property that actually matters: the column is sized by the LONGEST id present, not by a
+    // number somebody typed. A table whose ids all happened to be short would pass the rule above
+    // while the width was still a literal.
+    const ids = results().map((r) => r.id);
+    const widest = ids.reduce((a, b) => (b.length > a.length ? b : a), "");
+    const row = rows.find((l) => l.startsWith(`  ${widest}`));
+    expect(row?.slice(2 + widest.length, 2 + widest.length + 2)).toBe("  ");
+  });
+});

@@ -13,6 +13,7 @@
 // header claimed coverage of two defects it could not reach.
 
 import {
+  everyRuleLiftsPolicy,
   formatFindings,
   loosenedPolicy,
   receiptSearchScope,
@@ -73,22 +74,74 @@ console.log(`  findings: ${receipts.findings.length}`);
 if (receipts.findings.length > 0) console.log(formatFindings(receipts));
 console.log("");
 
-// ---- the controls, every time --------------------------------------------------------------------
-// A search whose control is optional is a search nobody re-checks. The graph control runs the engine
-// on a table whose ceilings are raised and judges it against the SHIPPED ceilings; judging it against
-// its own loosened table is a tautology and the first version of this did exactly that.
-const control = searchAdversarially({
-  iterations: Math.min(5_000, iterations),
+// ---- the controls, every time, and NAMED for what each one proves --------------------------------
+//
+// A search whose control is optional is a search nobody re-checks. Each control runs a deliberately
+// broken engine and judges it against the SHIPPED table; judging it against its own broken table is a
+// tautology and the first version of this did exactly that.
+//
+// THEY ARE SEPARATED BECAUSE THEY PROVE DIFFERENT THINGS, and one line reporting "the control" let a
+// ceiling control stand in for a binding one for a release. See DEFECTS_FOUND.md section 38.
+const controlIters = Math.min(5_000, iterations);
+
+const ceilingControl = searchAdversarially({
+  iterations: controlIters,
   seed,
   policy: loosenedPolicy(),
   oraclePolicy: CAPABILITY_POLICY,
 });
 console.log(
-  `  negative control (loosened table, shipped ceilings): ${control.findings.length} finding(s)`,
+  `  CEILING control    (every ceiling raised, judged against the shipped table)   ${String(ceilingControl.findings.length).padStart(5)} finding(s)`,
 );
-if (control.findings.length === 0) {
+console.log(
+  "                     proves: the graph search detects a CEILING breach. It does NOT exercise",
+);
+console.log("                     receipts at all - a loosened engine never needs one.");
+
+// Ceilings untouched, so a receipt is still required; only rule acceptance is broken.
+const bindingControl = searchReceipts({
+  iterations: controlIters,
+  seed,
+  policy: everyRuleLiftsPolicy(),
+  oraclePolicy: CAPABILITY_POLICY,
+});
+console.log(
+  `  BINDING control    (every rule accepted, ceilings as shipped)                 ${String(bindingControl.findings.length).padStart(5)} finding(s)`,
+);
+console.log(
+  "                     proves: the receipt search detects a receipt admitted under a rule its row",
+);
+console.log(
+  "                     does not lift by. This is the half the ceiling control cannot reach.",
+);
+
+// NO RUNNABLE CONTROL, AND SAYING SO RATHER THAN INVENTING ONE. Malformedness is structural: it does
+// not depend on the table, so no policy this script can build makes the engine mishandle it.
+// Measured, so nobody re-derives it: a loosened table gives the malformed search zero findings.
+const malformedControl = searchMalformed({
+  iterations: controlIters,
+  seed,
+  policy: loosenedPolicy(),
+});
+console.log(
+  `  MALFORMED control  (no policy can break structural validity - measured)       ${String(malformedControl.findings.length).padStart(5)} finding(s)`,
+);
+console.log(
+  "                     its control is `pnpm audit:mutations`, entries `decide-is-total` and",
+);
+console.log(
+  "                     `receipt-elements-validated`, which delete the gate and require this search",
+);
+console.log("                     to go red. Not something this script can run.");
+
+const deadControls = [
+  ["CEILING", ceilingControl],
+  ["BINDING", bindingControl],
+].filter(([, c]) => c.findings.length === 0);
+for (const [name, _c] of deadControls) {
+  console.log("");
   console.log(
-    "  THE CONTROL FOUND NOTHING. The searches above prove nothing; fix that before reading them.",
+    `  THE ${name} CONTROL FOUND NOTHING. The search it licenses proves nothing; fix that first.`,
   );
 }
 console.log("");
@@ -197,5 +250,5 @@ const failed =
   graph.findings.length > 0 ||
   malformed.findings.length > 0 ||
   receipts.findings.length > 0 ||
-  control.findings.length === 0;
+  deadControls.length > 0;
 process.exit(failed ? 1 : 0);
