@@ -13,11 +13,14 @@
 // header claimed coverage of two defects it could not reach.
 
 import {
+  compareGuidedToRandom,
   everyRuleLiftsPolicy,
   formatFindings,
   loosenedPolicy,
   receiptSearchScope,
   searchAdversarially,
+  searchGuided,
+  searchLedgerReplay,
   searchMalformed,
   searchReceipts,
 } from "../packages/conformance/dist/index.js";
@@ -72,6 +75,43 @@ for (const [shape, n] of Object.entries(receipts.shapes).sort((a, b) => b[1] - a
 }
 console.log(`  findings: ${receipts.findings.length}`);
 if (receipts.findings.length > 0) console.log(formatFindings(receipts));
+console.log("");
+
+// ---- search 4: sequences of actions over one real ledger -----------------------------------------
+const replay = searchLedgerReplay({ iterations: malformedIterations, seed });
+console.log(
+  `  REPLAY SEARCH   ${replay.explored} actions over ONE ledger   ${replay.spends} burned   ${replay.replaysAttempted} replays attempted`,
+);
+for (const [shape, n] of Object.entries(replay.shapes).sort((a, b) => b[1] - a[1])) {
+  console.log(`    ${shape.padEnd(18)} ${String(n).padStart(8)}`);
+}
+console.log(`  findings: ${replay.findings.length}`);
+if (replay.findings.length > 0) console.log(formatFindings(replay));
+console.log("");
+
+// ---- search 5: feedback-guided, and its own control in the same breath ---------------------------
+//
+// This one reports a NEGATIVE RESULT and reports it every run. The loop reads the engine's answer and
+// mutates the inputs that reached a new capability+reason-code signature; a feedback-free control on
+// the same generator, seed and budget reaches the same coverage. Printed rather than buried because a
+// measurement that says "this did not help" is the useful half of having built it.
+const guided = compareGuidedToRandom({ iterations: Math.min(8_000, iterations), seed });
+const guidedRun = searchGuided({ iterations: Math.min(8_000, iterations), seed });
+console.log(
+  `  GUIDED SEARCH   ${guidedRun.explored} decisions   ${guidedRun.signatures} signatures   ${guidedRun.mutated} of them mutations of kept inputs`,
+);
+console.log(
+  `    feedback ON  ${String(guided.guided).padStart(5)} signatures     feedback OFF ${String(guided.random).padStart(5)}     ratio ${guided.ratio.toFixed(2)}`,
+);
+console.log(
+  "    IT DOES NOT HELP, and that is the measurement rather than a pending improvement: a total",
+);
+console.log(
+  "    table-driven policy over ten capabilities has a small reachable behaviour space, and random",
+);
+console.log("    generation saturates it. See docs/DEFECTS_FOUND.md section 41.");
+console.log(`  findings: ${guidedRun.findings.length}`);
+if (guidedRun.findings.length > 0) console.log(formatFindings(guidedRun));
 console.log("");
 
 // ---- the controls, every time, and NAMED for what each one proves --------------------------------
@@ -134,9 +174,39 @@ console.log(
 );
 console.log("                     to go red. Not something this script can run.");
 
+// A store with no memory. Every replay should then be permitted, and every one is a finding - which
+// is what licenses the replay search's claim, exactly as the BINDING control licenses the receipt
+// search's. See DEFECTS_FOUND.md section 41.
+const forgetful = {
+  guarantees: {
+    singleProcess: true,
+    singleHost: false,
+    crossHostSafe: false,
+    crashSafe: false,
+    staleLockReclaim: false,
+    caveat: "a deliberately forgetful ledger, for the negative control",
+  },
+  isSpent: () => false,
+  spend: () => "recorded",
+  entries: () => [],
+};
+const replayControl = searchLedgerReplay({
+  iterations: controlIters,
+  seed,
+  ledger: forgetful,
+});
+console.log(
+  `  REPLAY control     (a ledger that remembers nothing)                         ${String(replayControl.findings.length).padStart(5)} finding(s)`,
+);
+console.log(
+  "                     proves: the replay search detects a store with no memory. Its spend model is",
+);
+console.log("                     written inside the search and never asks the ledger.");
+
 const deadControls = [
   ["CEILING", ceilingControl],
   ["BINDING", bindingControl],
+  ["REPLAY", replayControl],
 ].filter(([, c]) => c.findings.length === 0);
 for (const [name, _c] of deadControls) {
   console.log("");
@@ -250,5 +320,7 @@ const failed =
   graph.findings.length > 0 ||
   malformed.findings.length > 0 ||
   receipts.findings.length > 0 ||
+  replay.findings.length > 0 ||
+  guidedRun.findings.length > 0 ||
   deadControls.length > 0;
 process.exit(failed ? 1 : 0);

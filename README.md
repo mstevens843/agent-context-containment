@@ -244,14 +244,18 @@ deployment.
 
 Two rows carry the argument.
 
-**Silent attacks.** Six holdout attacks contain no injection language at all - a false statement of
+**Silent attacks.** Some holdout attacks contain no injection language at all - a false statement of
 fact, a URL that carries data outward, an instruction split across two retrieved chunks. The
-classifier scores **0/6** because there is nothing in the text to find. Containment scores **6/6**
-because it never looks at the text.
+classifier catches none of them, because there is nothing in the text to find; containment catches
+all of them, because it never looks at the text. **The fractions are in the generated table above**
+rather than retyped here: a number written beside a table it was copied from is a number nothing
+recomputes, which is how this file carried a stale corpus size for four releases. See
+`DEFECTS_FOUND.md` section 40.
 
-**Quoted attacks.** The classifier **over-blocks 3 of 6 benign cases** - a security ticket discussing
-a payload string, a hostile page being summarised rather than acted on. Security teams and support
-desks discuss attack strings constantly, so these are ordinary documents rather than contrived ones.
+**Quoted attacks.** The classifier over-blocks benign cases - a security ticket discussing a payload
+string, a hostile page being summarised rather than acted on. Security teams and support desks discuss
+attack strings constantly, so these are ordinary documents rather than contrived ones. Again: the row
+is in the table above.
 
 Neither failure is fixed by a better detector. The claim is not that this solves prompt injection; it
 is that **these two failures are structural for anything that reads the text**, and containment is
@@ -261,8 +265,8 @@ unaffected because it never does.
 
 | # | Claim | Where to look |
 |---|---|---|
-| 1 | Classifier-only misses silent injection | `none` row above, 0/6. Corpus `web-h-002`, `email-h-001`, `rag-h-002` |
-| 2 | Classifier-only over-blocks benign quoted attacks | benign row above, 3/6. Corpus `benign-h-001` |
+| 1 | Classifier-only misses silent injection | the `silent attacks blocked` row of the generated table above. Corpus `web-h-002`, `email-h-001`, `rag-h-002` |
+| 2 | Classifier-only over-blocks benign quoted attacks | the `benign quoted-attack cases over-blocked` row of the generated table above. Corpus `benign-h-001` |
 | 3 | Containment decides on provenance and capability flow, not wording | Corpus pairs `mix-t-001`/`mix-t-002` and `mix-t-003`/`mix-t-004` - **byte-identical untrusted content, opposite answers.** Asserted directly in `holdout.test.ts` |
 | 4 | Declassification is explicit and narrow | [`docs/DECLASSIFICATION.md`](docs/DECLASSIFICATION.md). Five rules, each finite by construction, each recording its own cardinality |
 | 5 | Mixed provenance is fine for harmless capabilities, refused at a sensitive argument | The same pairs. `read_only_tool` admits `TOOL_DERIVED` in a sink; `email_send` does not |
@@ -455,7 +459,7 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **655 tests across five packages.**
+the pure core grows a clock or an import. **678 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through

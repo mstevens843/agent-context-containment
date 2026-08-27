@@ -295,6 +295,42 @@ import {`,
     tests: "packages/conformance/test/receiptadversary.test.ts",
     why: "The row decides which rules can lift it at all, and this is where that decision is enforced. It is also the branch that made the receipt search vacuous on its first run - every generated receipt used a rule `web_fetch` does not accept, so nothing was ever admitted while the report read as broad coverage. See §34",
   },
+  // ---- the cross-action replay machinery, reached for the first time by the ledger search --------
+  //
+  // Three layers have to agree for a replay to be refused: the engine must consult `spentReceipts`,
+  // the guard must build that set from the store, and the store must remember. Until
+  // `ledgersearch.test.ts` existed, only the first had a search behind it and the other two were
+  // defended by hand-written tests over fixtures. Each of these is caught by that file alone.
+  {
+    id: "engine-consults-spent",
+    claim: "a receipt an earlier action spent admits nothing",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (spent?.has(r.id)) {`,
+    replace: `    if (spent?.has(r.id) && false) {`,
+    tests: "packages/conformance/test/ledgersearch.test.ts",
+    why: "The engine half of replay refusal. Deleting it lets every burned receipt work again, and the ledger search reports one finding per replayed id - a number in the thousands, because the search re-presents burned ids by construction rather than by fixture. See §41",
+  },
+  {
+    id: "guard-passes-spent-set",
+    claim: "the guard hands the engine what its ledger has already burned",
+    package: "ledger",
+    file: "packages/ledger/src/index.ts",
+    find: `  const spentSet = (): ReadonlySet<ReceiptId> => new Set(ledger.entries().map((e) => e.receipt));`,
+    replace: `  const spentSet = (): ReadonlySet<ReceiptId> => new Set();`,
+    tests: "packages/conformance/test/ledgersearch.test.ts",
+    why: "THE WIRING, which is the layer nobody tests because it looks like plumbing. A correct engine and a correct store still permit every replay if the set never crosses between them, and this is the shape of defect §10: the answer existed and was discarded on the way. Nothing reached it before the ledger search, because a pre-seeded `spentReceipts` fixture bypasses the guard entirely. See §41",
+  },
+  {
+    id: "memory-ledger-remembers",
+    claim: "the in-memory ledger reports a spent receipt as spent",
+    package: "ledger",
+    file: "packages/ledger/src/index.ts",
+    find: `    isSpent: (receipt) => byId.has(receipt as string),`,
+    replace: `    isSpent: () => false,`,
+    tests: "packages/conformance/test/ledgersearch.test.ts",
+    why: "The store half. Caught by the per-iteration contract check - the verdict reports a spend and the ledger is asked whether it holds it - which is the one property a `Set` fixture can never express, because there the fixture IS the record. See §41",
+  },
 ];
 
 const run = (cmd, opts = {}) => {

@@ -869,7 +869,7 @@ exists, or a package script — and every entry was re-anchored.
 
 ### The 30 unguarded branches
 
-`scripts/audit-mutations.mjs` reports 21/21 caught. That is 21 branches somebody thought to list. A
+`scripts/audit-mutations.mjs` reports 24/24 caught. That is 24 branches somebody thought to list. A
 sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
 no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
 in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
@@ -2497,3 +2497,118 @@ because slot uniqueness means one object matches at most one slot; **two objects
 
 The ratchet counts all of them and refuses to let the total grow. **That is a bound, not coverage**,
 and it has said so since section 16.
+
+## 41. Two named gaps closed, one closed and measured as useless, and two that stay open for reasons no code can change
+
+Four limitations were put up for closure. Two closed, one closed and produced a negative result worth
+more than the feature, and two are not tasks — they are facts about this repository and about
+infrastructure, and the honest move is to say exactly why.
+
+### The receipt search never touched a ledger, and now one does
+
+`docs/LIMITATIONS.md` row 14 had said it for four releases: *"`spentReceipts` is a `Set` this process
+builds, not a database"* and *"there are no multi-step agent runs, so a replay ACROSS actions is only
+modelled by pre-seeding that set"*. Both were true, and the second is the one that mattered — a receipt
+was "already spent" because the generator said so, never because an earlier action had used it.
+
+`searchLedgerReplay` runs every iteration through a real `Guard` over a real `ReceiptLedger`, and the
+ledger carries across iterations. Measured at 8,000 iterations on seed `0x1ed6e401`: **3,032 receipts
+genuinely burned and 2,834 iterations that re-presented a burned id.** The floor asserts both, because
+a run that never replays cannot tell a store that refuses replays from one with no memory at all.
+
+It reaches three layers that had to agree and had only hand-written tests between them, each now a
+mutation entry, each measured by deletion:
+
+| deleted | findings |
+|---|---|
+| `engine-consults-spent` — the engine's `spentReceipts` check | 2,834 `under_block` |
+| `guard-passes-spent-set` — the guard building that set from the store | 2,834 `under_block` |
+| `memory-ledger-remembers` — the store answering `isSpent` | 8,700 (5,866 `wrong_admission`, 2,834 `under_block`) |
+
+The middle one is the interesting one. **A correct engine and a correct store still permit every
+replay if the set never crosses between them** — defect §10's shape, one layer up — and no
+`spentReceipts` fixture can reach it, because a fixture bypasses the guard entirely. The third is
+caught by a per-iteration contract check that a `Set` cannot express either: the verdict reports a
+spend, and the ledger is asked whether it holds it. Where the fixture IS the record, that question has
+no content.
+
+**Its own oracle was wrong first.** The spend model dropped the steering-role clamp — both branches of
+its ternary returned `defaultCeiling` — so it believed no receipt was needed where the engine spent
+one, never recorded those spends, and reported 44 `over_block` findings when a later iteration
+replayed an id the engine had correctly burned. A spend model that mis-reads the ceiling is not a
+spend model. The engine was right every time.
+
+### The search now reads the engine's answer, and it makes no difference
+
+Row 10 said: *"it does not learn, it does not read the engine to choose its next move"*. `searchGuided`
+makes the first half false. Every decision is reduced to a capability-plus-reason-code signature, and
+an input reaching a new one is kept and mutated later — coverage-guided fuzzing, applied to a policy
+engine.
+
+**It does not outperform random generation.** `compareGuidedToRandom` runs a feedback-free control on
+the same generator, seed and budget:
+
+| budget | guided | random | ratio |
+|---|---|---|---|
+| 1,000 | 30–35 | 30–32 | 0.94 – 1.17 |
+| 4,000 | 37–39 | 35–37 | 1.00 – 1.11 |
+| 12,000 | 39 | 38 | 1.03 |
+
+Two seeds each. The loop runs — most iterations are mutations of kept inputs — and buys nothing.
+
+The reason is a property of the engine rather than a defect in the search: **a total, table-driven
+policy over ten capabilities has a small reachable behaviour space**, and random sampling saturates it
+within a few thousand iterations. There is nothing left to steer toward. That is a real result about
+this design, and it is the reason the search ships: the measurement is worth more than the feature.
+
+The first version was worse for a duller reason. Its coverage point ignored WHICH capability produced
+the outcome, so `DENY|taint_exceeds_ceiling` on `payment` and on `web_fetch` were the same point,
+leaving about eleven signatures in total. Naming the row is the correct granularity, and it roughly
+quadrupled the space **without changing the conclusion** — which is the only reason it is not a thumb
+on the scale.
+
+Its first control asserted nothing at all: a placeholder that compared an empty object's key count to
+zero. `searchGuided` takes an `oraclePolicy` now, so a loosened-table control is judged against the
+shipped table rather than against the table it just loosened, and a second test pins that the
+same-table run reports nothing — the tautology the parameter exists to prevent.
+
+**Row 10 has two halves now, and they are different sentences.** It DOES read the engine to choose its
+next move. It is still NOT an adaptive attacker: it has no goal, it cannot decide payments look
+interesting and concentrate there, it maximises a novelty proxy the author picked, and the mutation
+operators are the author's list.
+
+### Model-in-the-loop is not implementable here, and saying so is the whole answer
+
+It needs a live model and a key, it is nondeterministic, and it cannot run in CI without either
+network access on every push or a recorded-transcript fixture that would be a fixture rather than a
+model. `pnpm judge:model` exists, is off by default, and prints `skipped`. Nothing changed and nothing
+should be claimed.
+
+### The freeze is unprovable for this repository, permanently
+
+`pnpm verify:freeze` wants a git object showing the holdout existed at a commit before the engine did.
+No such object exists — the holdout was not committed before the engine — and **a split created today
+is also after-the-engine**, so no amount of new work produces one. `corpus/holdout_v2` already carries
+a `FREEZE.json` saying exactly that about itself.
+
+It exits 1 by design, `audit-release.sh` fails if it ever *passes*, and both remain true. This is not
+a task; it is a fact about a history that cannot be rewritten honestly.
+
+### Whether YOUR hosts share one database is not a question this repository can ask
+
+`requireGuarantees` compares a **declaration** against a **requirement** and does not verify the
+declaration. Since section 40 CI proves the adapter against a database CI itself starts, which says
+nothing about anyone's deployment.
+
+What was possible, and was missing, is telling a deployer how to check it themselves.
+`docs/ADOPTION_GUIDE.md` now carries it: run `prove:postgres` from each host against the same
+`DATABASE_URL`, then compare `select count(*) from containment_spent_receipts` from each. **Two hosts
+reporting different counts are not sharing a ledger**, and a `crossHostSafe` declaration on that
+deployment is false however correct the adapter is. That is precisely the failure `requireGuarantees`
+cannot catch, so it is written out rather than left as a caveat.
+
+### The count that matters
+
+Two of the four are closed. One is closed and measured as useless, which is a result rather than a
+feature. Two cannot be closed by any code in this repository, and both now say why in the place a
+reader would look rather than only in this file.

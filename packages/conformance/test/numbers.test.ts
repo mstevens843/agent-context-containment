@@ -15,7 +15,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error - a plain .mjs script helper, deliberately not part of any package's build
-import { parseTestCountsForBlock } from "../../../scripts/generated-blocks.mjs";
+// biome-ignore format: the ts-expect-error must apply to the module import line
+import { parseSinglePackageTestCount, parseTestCountsForBlock } from "../../../scripts/generated-blocks.mjs";
 // @ts-expect-error - a plain .mjs helper, deliberately not part of any package's build
 import { numericClaims, scanDocument } from "../../../scripts/lib/numeric-noise.mjs";
 
@@ -52,6 +53,35 @@ describe("the generated test-count block reads CI output honestly", () => {
       ["core", 266],
       ["ledger", 89],
     ]);
+  });
+
+  it("parses the grouped output shape GitHub produced under execSync", () => {
+    expect(
+      parseTestCountsForBlock(
+        [
+          "> @agent-context-containment/core@0.1.0 test /home/runner/work/repo/repo/packages/core",
+          "> vitest run",
+          " Test Files  15 passed (15)",
+          "      Tests  266 passed (266)",
+          "> @agent-context-containment/conformance@0.1.0 test /home/runner/work/repo/repo/packages/conformance",
+          "> vitest run",
+          " Test Files  24 passed (24)",
+          "      Tests  287 passed (287)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      ["conformance", 287],
+      ["core", 266],
+    ]);
+  });
+
+  it("parses one package's Vitest summary without relying on Turbo prefixes", () => {
+    expect(
+      parseSinglePackageTestCount(
+        [" Test Files  24 passed (24)", "      Tests  287 passed (287)"].join("\n"),
+        "conformance",
+      ),
+    ).toBe(287);
   });
 
   it("refuses a red suite instead of summing the packages that happened to pass", () => {

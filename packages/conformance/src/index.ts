@@ -168,3 +168,12 @@ export {
   receiptSearchScope,
   searchReceipts,
 } from "./receiptadversary.js";
+
+export { type GuidedResult, compareGuidedToRandom, searchGuided } from "./guided.js";
+
+export {
+  LEDGER_SHAPES,
+  type LedgerSearchResult,
+  type LedgerShape,
+  searchLedgerReplay,
+} from "./ledgersearch.js";

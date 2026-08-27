@@ -41,7 +41,7 @@ numbers about nothing.
 | **generated blocks match their generators** | `pnpm blocks:check` | four passes shipped a stale number before this existed |
 | **the generated report is current** | `pnpm report:check` | `docs/REPORT.md` is a committed copy of `pnpm report:markdown` output, and `blocks:check` never covered it — it watches GENERATED markers inside hand-written documents, and that file has none |
 | **claim registry** | `pnpm audit:claims` | every PROVEN claim names a test AND a negative control |
-| **mutation audit** | `pnpm audit:mutations` | **21/21 caught** — deleting any listed fix fails a test |
+| **mutation audit** | `pnpm audit:mutations` | **24/24 caught** — deleting any listed fix fails a test |
 | **the prose guard can fail** | `pnpm audit:docs` | injects a false claim and requires it to be caught |
 | examples | `examples/*.ts`, `examples/agents/all.ts` | all run |
 | playground matrix | `npx tsx examples/playground.ts --matrix --role sink_identity` | runs |

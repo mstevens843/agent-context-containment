@@ -227,6 +227,25 @@
       "mutation": "receipt-one-slot",
       "generatedBy": "pnpm adversary",
       "note": "THE ADMISSION FLOOR IS THE POINT. The first version of this search never admitted a single receipt - every one used a rule its capability row does not lift by - so it explored only the refusal path while reporting what looked like broad coverage. A test now floors how many iterations reach ALLOW, because a search where no receipt ever works cannot tell a correct engine from one that refuses everything. What it does NOT cover: `spentReceipts` is a Set this process builds rather than a database, there are no multi-step runs, and it shares the lattice and the capability table data with the engine. See the receipts row of docs/LIMITATIONS.md and docs/DEFECTS_FOUND.md."
+    },
+    {
+      "id": "ledger-replay-search",
+      "claim": "A seeded search over sequences of actions sharing one real ReceiptLedger finds no case where a receipt an earlier action spent is admitted again.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/ledgersearch.test.ts",
+      "negativeControl": "an in-test ledger that remembers nothing must produce permitted-replay findings; and mutation entries `engine-consults-spent`, `guard-passes-spent-set` and `memory-ledger-remembers` must each fail that file - the engine's check, the guard's wiring and the store's memory, which are three layers that all have to agree",
+      "mutation": "engine-consults-spent",
+      "generatedBy": "pnpm adversary",
+      "note": "REPLAY ACROSS ACTIONS, WHICH NO SEARCH REACHED BEFORE. the receipts row of docs/LIMITATIONS.md said for four releases that spentReceipts was a Set this process builds and that a replay across actions was only modelled by pre-seeding it. This runs a real Guard over a real ReceiptLedger and carries the store across iterations, so a receipt is refused because an earlier action burned it. The floor asserts the run actually replays: a sequence of fresh receipts would satisfy every property above while proving nothing. WHAT IT DOES NOT COVER: one process, one ledger, no concurrency - two guards racing is prove:crosshost and prove:postgres, not this. The in-suite run uses memoryLedger, so it proves the ENGINE honours a store, not that any store is durable. See DEFECTS_FOUND.md section 41."
+    },
+    {
+      "id": "guided-search-feedback-loop",
+      "claim": "A feedback-guided search reduces each decision to a capability and reason-code signature and mutates the inputs that reached a new one.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/guided.test.ts",
+      "negativeControl": "`packages/conformance/test/guided.test.ts` runs the `noFeedback` control, which must keep no corpus and mutate nothing - or the comparison it anchors is a run against itself; and it runs a loosened-ceiling engine from `packages/conformance/src/guided.ts` judged against the shipped table, which must produce under-block findings, while the same engine judged by its own table must produce none",
+      "generatedBy": "pnpm adversary",
+      "note": "AND IT DOES NOT OUTPERFORM RANDOM GENERATION. Measured by compareGuidedToRandom on the same generator, seed and budget: parity across two seeds and three budgets, ratio 0.94 to 1.17. The loop runs - most iterations are mutations of kept inputs - and buys nothing, because a total table-driven policy over ten capabilities has a small reachable behaviour space that random sampling saturates. That is a recorded negative result about this design, not a pending improvement, and it is why the claim above is about the loop EXISTING rather than about it winning. The tests floor that the loop runs and that it does not HURT; none asserts it wins. This does NOT make the project an adaptive attacker: there is no goal, the novelty metric is a proxy the author chose, and the mutation operators are the author's list. See DEFECTS_FOUND.md section 41."
     }
   ]
 }

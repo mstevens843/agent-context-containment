@@ -24,8 +24,9 @@
 // script that produces it, and `pnpm audit:claims` re-runs that script and compares. Blocks are for
 // TABLES; the claim registry is for SENTENCES. Both are needed because neither covers the other.
 
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { execFileSync, execSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classify } from "../packages/classifier/dist/index.js";
 import {
@@ -66,6 +67,38 @@ const stripAnsi = (s) => {
 
 const testOutputTail = (out) => stripAnsi(out).split("\n").slice(-40).join("\n").trim();
 
+export const parseSinglePackageTestCount = (raw, label = "package") => {
+  const out = stripAnsi(raw);
+  const failedSummaries = out
+    .split("\n")
+    .filter((line) => /^\s*(Test Files|Tests)\s+.*\bfailed\b/.test(line));
+
+  if (failedSummaries.length > 0) {
+    throw new Error(
+      [
+        `generated-blocks: ${label} tests were red while computing the test-counts block.`,
+        "This is a test failure, not stale generated documentation.",
+        ...failedSummaries.slice(-8),
+      ].join("\n"),
+    );
+  }
+
+  const matches = [...out.matchAll(/^\s*Tests\s+(\d+)\s+passed\b/gm)];
+  if (matches.length === 0) {
+    throw new Error(
+      [
+        `generated-blocks: could not parse ${label}'s Vitest test count.`,
+        "The test-count block parser needs to be updated for the current runner output.",
+        testOutputTail(out),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    );
+  }
+
+  return Number(matches[matches.length - 1][1]);
+};
+
 /**
  * Extract the package rows for the test-count block from Turborepo/Vitest output.
  *
@@ -81,7 +114,7 @@ export const parseTestCountsForBlock = (raw) => {
   const out = stripAnsi(raw);
   const failedSummaries = out
     .split("\n")
-    .filter((line) => /:test:\s+(Test Files|Tests)\s+.*\bfailed\b/.test(line));
+    .filter((line) => /(?:^|:test:)\s+(Test Files|Tests)\s+.*\bfailed\b/.test(line));
 
   if (failedSummaries.length > 0) {
     throw new Error(
@@ -93,10 +126,22 @@ export const parseTestCountsForBlock = (raw) => {
     );
   }
 
-  const per = [...out.matchAll(/^([^:\n]+):test:\s+Tests\s+(\d+)\s+passed\b/gm)].map((m) => {
+  let per = [...out.matchAll(/^([^:\n]+):test:\s+Tests\s+(\d+)\s+passed\b/gm)].map((m) => {
     const packageName = m[1].includes("/") ? m[1].slice(m[1].lastIndexOf("/") + 1) : m[1];
     return [packageName, Number(m[2])];
   });
+
+  if (per.length === 0) {
+    const packageBlocks = [
+      ...out.matchAll(/^>\s+@agent-context-containment\/([^@\s]+)@[^\n]*\s+test\s+[^\n]*$/gm),
+    ];
+    per = packageBlocks.flatMap((m, i) => {
+      const next = packageBlocks[i + 1]?.index ?? out.length;
+      const block = out.slice(m.index, next);
+      const count = [...block.matchAll(/^\s*Tests\s+(\d+)\s+passed\b/gm)].at(-1)?.[1];
+      return count === undefined ? [] : [[m[1], Number(count)]];
+    });
+  }
 
   if (per.length === 0) {
     throw new Error(
@@ -113,7 +158,51 @@ export const parseTestCountsForBlock = (raw) => {
   return per.sort((a, b) => b[1] - a[1]);
 };
 
-const runTestsForCountBlock = () => {
+const testPackages = () =>
+  readdirSync(join(ROOT, "packages"))
+    .filter((dir) => existsSync(join(ROOT, "packages", dir, "package.json")))
+    .map((dir) => {
+      const manifest = JSON.parse(
+        readFileSync(join(ROOT, "packages", dir, "package.json"), "utf8"),
+      );
+      return {
+        dir,
+        label: String(manifest.name ?? dir).includes("/")
+          ? String(manifest.name).slice(String(manifest.name).lastIndexOf("/") + 1)
+          : dir,
+        hasTest: typeof manifest.scripts?.test === "string",
+      };
+    })
+    .filter((p) => p.hasTest);
+
+const runPackageTestsForCountBlock = () => {
+  const counts = [];
+  for (const pkg of testPackages()) {
+    let out = "";
+    try {
+      out = execFileSync("pnpm", ["--dir", join(ROOT, "packages", pkg.dir), "-s", "test"], {
+        cwd: ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+    } catch (e) {
+      out = `${e.stdout ?? ""}${e.stderr ?? ""}`;
+      throw new Error(
+        [
+          `generated-blocks: \`${pkg.label}\` tests failed while computing the test-counts block.`,
+          "Fix the test suite first; do not refresh generated documentation from a red run.",
+          testOutputTail(out),
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+    }
+    counts.push([pkg.label, parseSinglePackageTestCount(out, pkg.label)]);
+  }
+  return counts.sort((a, b) => b[1] - a[1]);
+};
+
+export const runTurboTestsForCountBlock = () => {
   try {
     return execSync("pnpm -s test", {
       cwd: ROOT,
@@ -321,8 +410,8 @@ const GENERATORS = {
     ].join("\n");
   },
   "test-counts": () => {
-    // Read from the packages themselves rather than from a remembered figure.
-    const per = parseTestCountsForBlock(runTestsForCountBlock());
+    // Run the packages themselves rather than parsing Turbo's human display format for package names.
+    const per = runPackageTestsForCountBlock();
     const total = per.reduce((n, [, c]) => n + c, 0);
     const rows = per.map(([p, c]) => `| \`${p}\` | ${c} |`);
     return ["| package | tests |", "|---|---|", ...rows, `| **total** | **${total}** |`].join("\n");

@@ -86,6 +86,32 @@ and is namespaced so that reaching for it shows up in a diff.
 is deployed onto three pods and nothing notices: `isSpent` starts answering `false` for receipts
 another pod already spent, and replay protection is gone with no error and no log line.
 
+### Checking that your hosts really do share one database
+
+`requireGuarantees` compares a **declaration** against a **requirement**. It does not verify the
+declaration, and nothing in this repository can: whether your pods reach the same Postgres is a fact
+about your infrastructure, not about this code. CI proves the adapter against a database CI itself
+starts, which says nothing about yours.
+
+You can check it yourself in about a minute, and it is worth doing once per environment:
+
+```
+# On host A, and then on host B, with the SAME DATABASE_URL your app uses:
+DATABASE_URL="$YOUR_REAL_URL" pnpm prove:postgres
+```
+
+Both runs must pass. Then confirm they were talking to the same place rather than to two databases
+that merely look alike:
+
+```
+psql "$YOUR_REAL_URL" -c "select count(*) from containment_spent_receipts"
+```
+
+Run that from each host and compare. **Two hosts that report different counts are not sharing a
+ledger**, and a `crossHostSafe` declaration on that deployment is false however correct the adapter
+is. That is the failure `requireGuarantees` cannot catch for you, which is why it is written out here
+rather than left as a caveat. See `DEFECTS_FOUND.md` section 41.
+
 ## 4. Handle each of the four answers
 
 | verdict | what it means | what to do |

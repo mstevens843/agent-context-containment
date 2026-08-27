@@ -49,10 +49,10 @@ Found by adding an import and watching nothing fail.
 **What v1.0 built:**
 
 - **`pnpm audit:mutations`** — fifteen critical branches, each deleted, rebuilt and re-tested, with the
-  tests required to **fail**. **21/21 caught**. Two properties learned the hard way: it refuses to run
+  tests required to **fail**. **24/24 caught**. Two properties learned the hard way: it refuses to run
   unless the baseline is green (a differential measurement needs a starting point), and every `find`
   must match exactly once (three entries matched zero times and would have reported as caught).
-- **`docs/claims.json`** — 27 headline claims, each with its grade, the test that would fail if it
+- **`docs/claims.json`** — 29 headline claims, each with its grade, the test that would fail if it
   were false, its negative control, and the command that produces any number in it. Enforced: a
   PROVEN claim with no negative control fails the build, because that is the §15 shape exactly.
 - **Generated blocks** — a `GENERATED:<generator>` marker pair in README and STATUS, filled and verified from the
@@ -270,7 +270,7 @@ engine. The benign column is the only thing that tells them apart.
 
 | | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 | v1.0.1 |
 |---|---|---|---|---|---|---|
-| tests | 263 | 304 | 361 | 414 | 534 | **655** |
+| tests | 263 | 304 | 361 | 414 | 534 | **678** |
 | hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **130** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 | 7 |
 | non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | **62** |
@@ -284,7 +284,7 @@ engine. The benign column is the only thing that tells them apart.
 | **real-database proof scenarios** | 0 | 0 | 0 | 0 | 11, live Postgres | **11, live Postgres** |
 | review workflows | 0 | 0 | 0 | 4 | 4 | 4 |
 | **reviewer decides for itself** | no | no | no | no | yes | **yes** |
-| defects recorded | 7 | 8 | 8 | 14 | 22 | **40** |
+| defects recorded | 7 | 8 | 8 | 14 | 22 | **41** |
 | decisions produced by corpus | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
 
 **v0.8 is the first pass since v0.4 to add corpus cases, and it added no engine capability.** The 28
@@ -338,23 +338,23 @@ Counted, not remembered — these were stale for four versions before v0.6.
 <!-- GENERATED:repo-stats -->
 | | |
 |---|---|
-| Source LOC | **12,958** across 5 packages |
-| Test LOC | **11,856** across 47 files |
+| Source LOC | **13,617** across 5 packages |
+| Test LOC | **12,170** across 49 files |
 | Example LOC | **1,843** across 15 files |
-| Script LOC | **4,048** — 20 report/proof/import scripts, 6 shell |
-| Total TypeScript | **26,657** |
-| Docs (docs/) | **6,184 lines** across 24 files |
+| Script LOC | **4,245** — 20 report/proof/import scripts, 6 shell |
+| Total TypeScript | **27,630** |
+| Docs (docs/) | **6,325 lines** across 24 files |
 <!-- /GENERATED -->
 
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
-| `conformance` | 287 |
+| `conformance` | 310 |
 | `core` | 266 |
 | `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **655** |
+| **total** | **678** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -420,8 +420,8 @@ this entry read before v1.0.
 | **the ingestion helpers infer nothing** | **PROVEN** | a hostile page declared `SYSTEM` is ALLOWED outright — `ingest.test.ts` asserts it, so the trust boundary is never a surprise |
 | `contextOf` refuses a dangling edge | **PROVEN** | an unresolvable edge would read as CLEAN — a laundering path that looks like a typo |
 | that a declaration is honest | **DELEGATED TO CALLER** | the helpers make it harder to mistype, never harder to lie |
-| **that these tests could actually fail** | **PROVEN, for 21 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
-| that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 27 a reader would quote, not every sentence |
+| **that these tests could actually fail** | **PROVEN, for 24 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
+| that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 29 a reader would quote, not every sentence |
 | that the audit machinery has no blind spots | **NOT CLAIMED** | it was written by the person whose claims it checks, and shares his blind spots exactly. The independent reader is the only control that does not |
 | `staleAfterMs` has no free value | **KNOWN RISK** | too long strands a receipt, too short double-spends |
 
@@ -506,7 +506,7 @@ alone has never counted in this repository.
 | exact imports, 62 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
 | lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 655** (534 before this pass) |
+| test | **PASS — 678** (534 before this pass) |
 | `decide()` is total: no input throws, every malformed one is denied | **PASS**, explicit shapes plus a seeded sweep |
 | a provenance DAG resolves by path, and a cycle still fails closed | **PASS**, diamond and cycle pinned separately |
 | an unrecognised parameter role admits clean input only | **PASS**, and it could ALLOW before |
@@ -537,7 +537,7 @@ alone has never counted in this repository.
 | reviewer and engine demonstrably disagree, both directions | **PASS** |
 | semantic advisories: 0 false positives on 10 honest bindings | **PASS** |
 | prose guard: no document overstates | **PASS**, and an injected false claim is caught |
-| mutation audit, 21 critical branches | **21/21 caught** — deleting any fix fails a test |
+| mutation audit, 24 critical branches | **24/24 caught** — deleting any fix fails a test |
 | mutation audit refuses a non-green baseline | **PASS** — a differential measurement needs a starting point |
 | mutation audit refuses a zero-match entry | **PASS** — caught 3 of its own entries on the first run |
 | generated blocks — 7 generated blocks match their generators | **PASS**, and it caught its first real drift within minutes |

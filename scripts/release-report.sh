@@ -36,7 +36,17 @@ step "build and test"
 pnpm -s lint >/dev/null && echo "  lint      PASS"
 pnpm -s typecheck >/dev/null && echo "  typecheck PASS"
 pnpm -s build >/dev/null && echo "  build     PASS"
-pnpm -s test 2>&1 | grep -E "Tests +[0-9]+ passed" | sed 's/^/  /'
+TEST_LOG="$(mktemp)"
+trap 'rm -f "$TEST_LOG"' EXIT
+if pnpm -s test >"$TEST_LOG" 2>&1; then
+  if ! grep -E "Tests +[0-9]+ passed" "$TEST_LOG" | sed 's/^/  /'; then
+    echo "  could not parse test summaries from pnpm test output"
+    exit 1
+  fi
+else
+  sed 's/^/  /' "$TEST_LOG"
+  exit 1
+fi
 
 step "capability manifests, semantic advisories, mutant bite matrix"
 pnpm -s verify:manifests >/dev/null && echo "  manifests: 0 contradictions across every table"
