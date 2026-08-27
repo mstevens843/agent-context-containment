@@ -805,7 +805,7 @@ if (!showAll && unregistered.length > 12)
 //
 // CI does not set this. The literal below is what ships, and the meta-test in numbers.test.ts
 // reads THIS LINE rather than the resolved value, so the override cannot raise the shipped bound.
-const MAX_UNREGISTERED = Number(process.env.CONTAINMENT_MAX_UNREGISTERED ?? 52);
+const MAX_UNREGISTERED = Number(process.env.CONTAINMENT_MAX_UNREGISTERED ?? 51);
 let ratchetFailed = false;
 if (unregistered.length > MAX_UNREGISTERED) {
   ratchetFailed = true;

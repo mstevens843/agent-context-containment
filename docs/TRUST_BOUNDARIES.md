@@ -63,8 +63,22 @@ case where it is **fooled and the engine is not**, plus one where it is right an
 conservative. That asymmetry is the argument for running both; it is not evidence that either is
 good. Workflow reports print mechanics and judgement on separate lines for the same reason.
 
-The **model judge** (`pnpm judge:model`) is off by default, refuses to run under CI, gates nothing,
-and enters no table. If it were deleted, every number in this repository would be unchanged.
+The **model modes** (`scripts/model-judge.mjs`) are off by default, refuse to run under CI, gate
+nothing, and enter no table. If they were deleted, every number in this repository would be
+unchanged. There are three: `--mode=labels` reviews the corpus's ground truth, `--mode=engine`
+reviews the engine's stated reasons, and `--mode=planner` puts **a live model in the loop** — it
+proposes the next tool call and the engine judges that proposal, with no fixture in between.
+
+They run through a local **Codex** or **Claude Code** CLI session rather than an API key, so trying
+them costs no separate billing relationship. That convenience changes nothing about their standing:
+**live model output is nondeterministic and is never test truth.** A model asked the same question
+twice can answer differently, and a figure that moves on its own cannot sit beside figures that do
+not. A `STEERED, ALLOWED` row in a planner run is a candidate for a human to read — often one of the
+documented release valves — not a defect report.
+
+The CLI providers are invoked read-only, ephemeral, and with no tools enabled, because the prompts
+are built from the corpus's untrusted content and pointing a coding agent with write access at attack
+strings would be a strange thing for this repository to do.
 
 ## Local tests vs deployment guarantees
 

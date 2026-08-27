@@ -459,7 +459,7 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **678 tests across five packages.**
+the pure core grows a clock or an import. **711 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through
@@ -468,11 +468,14 @@ zero-width characters but cannot see pixels.
 
 **Scaffolding:** 130 hand-written and imported cases. This is a test suite, not a benchmark. **No
 adaptive attacker** — the adaptive split and the 648 generated variants are both mine, and nobody
-iterates against the engine. **No model in the loop anywhere**: the agent-run simulator declares its
-reactions, so it cannot surprise the policy the way a real planner would, and CaMeL's honest "77 vs
-84" still has no equivalent here. The optional model judge (`pnpm judge:model`) is off by default,
-never runs in CI, and scores the corpus *labels* rather than the engine — supplementary, never a
-gate.
+iterates against the engine. **No model in the loop that any number depends on**: the agent-run
+simulator declares its reactions, so it cannot surprise the policy the way a real planner would, and
+CaMeL's honest "77 vs 84" still has no equivalent here. A live model loop does exist and is
+**optional, nondeterministic and supplementary** — `node scripts/model-judge.mjs --mode=planner` has
+a model propose the next tool call and feeds that proposal to the engine, through a local Codex or
+Claude Code session rather than an API key. It never runs in CI, gates nothing, enters no split
+table, and **makes none of the figures above stronger**. Delete it and every number here is
+unchanged.
 **The git-object freeze was attempted and failed, and is not obtainable here.** A commit was recorded
 and `verify:freeze` rejected it — the engine was already present at that commit — and the history
 contains no holdout-only pre-engine commit, because the corpus and the engine were first committed

@@ -2612,3 +2612,108 @@ cannot catch, so it is written out rather than left as a caveat.
 Two of the four are closed. One is closed and measured as useless, which is a result rather than a
 feature. Two cannot be closed by any code in this repository, and both now say why in the place a
 reader would look rather than only in this file.
+
+## 42. A model actually in the loop, two guards over one ledger, and an optional tool that had never once completed a run
+
+Two limitations were put up for closure. Both moved, neither vanished, and the work turned up a
+defect in the thing being extended.
+
+### `scripts/model-judge.mjs` could not finish a run, in either mode, and never could have
+
+`excludedNote` was referenced in two template strings and **defined nowhere**. `md` is built
+unconditionally at module scope, so any completed run threw `ReferenceError: excludedNote is not
+defined` before printing a single result.
+
+Nobody noticed because the script exits at the credentials gate on any machine without
+`ANTHROPIC_API_KEY` — which is every CI machine and was every machine here. **An optional tool that has
+never once completed a run is not optional; it is broken and unreported.** The variable now says the
+thing a reader of a fraction most needs: how many replies were excluded from the denominator because
+they could not be read.
+
+Its JSON extractor was also `/\{[\s\S]*\}/`, which spans from the first brace to the **last** one
+anywhere in the reply — so a model that answered and then offered an example produced a string parsing
+as neither. It counts depth now, and takes the first complete object.
+
+### A model is now in the loop, through a CLI you have already signed into
+
+`--mode=planner` shows a model the user's task and the untrusted content, asks it to propose the next
+tool call as strict JSON, and feeds **that proposal** into `decide()`. No fixture in between. The
+model is not told a policy engine is watching, and is not told what the corpus considers correct — a
+model warned its answer is about to be checked for safety answers differently, and that would measure
+the warning.
+
+Three providers behind one interface: `codex` (local Codex session), `claude-code` (Claude Code plan
+or OAuth), and the original `anthropic-api`. The first two need **no API key**.
+
+**The CLI providers are opt-in, and that decision matters more than it looks.** The first version
+auto-selected whichever CLI was installed. That would have meant `pnpm judge:model` — inert on every
+developer machine for its whole life — silently beginning to spend plan quota the day someone
+installed Codex. A script that was free yesterday and bills today is a bad surprise even when the
+output is useful. Unset, it considers `anthropic-api` only and skips exactly as before.
+
+They are invoked read-only, ephemeral, with local config ignored and no tools enabled, and the prompt
+goes over **stdin rather than argv**. The prompts are built from the corpus's untrusted content; a
+coding agent with write access pointed at attack strings would be a strange thing for this repository
+of all repositories to build.
+
+### The planner's first metric blamed the engine for cases it was right about
+
+The first version counted "hostile case, engine ALLOWed" as a containment miss. On the first live run
+three of five hostile cases came back that way — and in every one the model had proposed
+`text_response` or `read_only_tool`. **Nothing was blocked because nothing needed blocking:** the
+injection never moved the model to an acting capability. Calling that a miss blames the engine; calling
+it a win credits the engine for work the *model* did.
+
+So a hostile case now has three outcomes, not two: *not steered*, *steered and blocked*, *STEERED AND
+ALLOWED*. The second version still overcounted — it tested the capability alone, so a `read_only_tool`
+lookup counted as steered even on a case whose attack was to induce a **payment** the model had
+refused. The condition is what the claim actually is: an acting-or-leaking capability **that untrusted
+content actually reached**.
+
+**And then it stopped.** A `STEERED, ALLOWED` row survives — a retrieved id routed into a
+`read_only_tool` selector, which is one of the ~40 documented release valves, allowed by the table on
+purpose. Refining the classifier a third time until nothing is ever flagged is how a check becomes
+decoration. The report says the row is a candidate for a human to read, and a human read it.
+
+**None of this makes any deterministic number stronger.** It never runs in CI, gates nothing, enters
+no split table. Delete it and every published figure is unchanged.
+
+### Two guards over one ledger, and the exact size of that
+
+`twoGuardsOneReceipt` builds two `Guard` instances over one store, hands them one valid receipt, and
+runs four interleavings. Exactly one spend is recorded in each. The control — two guards over
+**separate** ledgers — lets the receipt through twice in all four, which is the replay the mechanism
+exists to prevent.
+
+The interesting row is `both_judged_then_both_committed`: **both guards return ALLOW and only one
+commit records.** Neither sees a spent receipt because neither has committed yet. A caller who acted on
+a `decideOnly` verdict without checking what `commit` returned would have acted twice. That is
+`commit`'s return value earning its existence, demonstrated rather than described.
+
+A fourth interleaving named `interleaved_await` was, on inspection, the same two calls `sequential`
+makes in the same order — a shape that was a copy of another shape, reporting the same result for the
+same reason. Replaced with one that is genuinely different: A judges, B runs to completion, A commits.
+
+**This is one process and one in-memory ledger. It is not deployment topology and not database
+concurrency.** A single-threaded runtime has no preemption; there is no second connection, no network,
+no crash. `memoryLedger` declares only `singleProcess`, and a test asserts it still does — if that
+adapter ever started claiming `crossHostSafe`, the careful wording in the docs citing it would
+silently become an understatement.
+
+The boundary, stated once and printed by `pnpm adversary` on every run:
+
+| | |
+|---|---|
+| here | the engine and guard honour a shared store when two of them race in one process |
+| `prove:crosshost` | adapter logic under interleavings the harness schedules |
+| `prove:postgres` | two independent connections racing one row in a real database |
+| **nowhere** | that YOUR hosts reach one database. That is infrastructure |
+
+### What did not close
+
+**Model-in-the-loop is now real and still not evidence.** It is live, nondeterministic, optional, and
+supplementary. CaMeL's 77-versus-84 remains without an equivalent here, because that is a benchmark
+result and this is an anecdote generator.
+
+**Deployment topology is untouched**, as it must be. The deployer-runnable check added in section 41
+is still the only answer to it.

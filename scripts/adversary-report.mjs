@@ -23,6 +23,7 @@ import {
   searchLedgerReplay,
   searchMalformed,
   searchReceipts,
+  twoGuardsOneReceipt,
 } from "../packages/conformance/dist/index.js";
 import { CAPABILITY_POLICY } from "../packages/core/dist/index.js";
 
@@ -87,6 +88,34 @@ for (const [shape, n] of Object.entries(replay.shapes).sort((a, b) => b[1] - a[1
 }
 console.log(`  findings: ${replay.findings.length}`);
 if (replay.findings.length > 0) console.log(formatFindings(replay));
+console.log("");
+
+// ---- proof: two guards, one ledger, and the boundary printed with it -----------------------------
+//
+// Not a search - four interleavings and a control, run every time because it is cheap. It is here so
+// the report states its OWN boundary rather than leaving a reader to infer one from the word
+// "concurrency". See docs/DEFECTS_FOUND.md section 42.
+const shared = twoGuardsOneReceipt();
+const separate = twoGuardsOneReceipt({ sharedLedger: false });
+console.log(
+  `  TWO GUARDS, ONE LEDGER   ${shared.outcomes.length} interleavings   ${shared.findings.length} finding(s)`,
+);
+for (const o of shared.outcomes) {
+  console.log(`    ${o.interleaving.padEnd(34)} ${o.winners} spend recorded, ${o.allowed} ALLOWed`);
+}
+console.log(
+  `    control, separate ledgers: ${separate.outcomes.every((o) => o.winners === 2) ? "both guards win, as they must" : "DID NOT REPLAY - the proof above is unlicensed"}`,
+);
+console.log(
+  "    THIS IS ONE PROCESS AND ONE IN-MEMORY LEDGER. It is not deployment topology and not",
+);
+console.log(
+  "    database concurrency: no preemption, no second connection, no crash. `prove:postgres` races",
+);
+console.log(
+  "    two independent connections against a real database; whether YOUR hosts reach one database",
+);
+console.log("    is infrastructure that no test here can reach.");
 console.log("");
 
 // ---- search 5: feedback-guided, and its own control in the same breath ---------------------------
@@ -322,5 +351,7 @@ const failed =
   receipts.findings.length > 0 ||
   replay.findings.length > 0 ||
   guidedRun.findings.length > 0 ||
+  shared.findings.length > 0 ||
+  separate.findings.length > 0 ||
   deadControls.length > 0;
 process.exit(failed ? 1 : 0);

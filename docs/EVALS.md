@@ -352,11 +352,34 @@ Reported **apart from** the five hand-written agent runs, always. Those five are
 these are unrealistic and many, and one number over both would let the generated count lend
 credibility to the runs a reader might actually read.
 
-### The optional model judge (`pnpm judge:model`)
+### The optional model modes (`scripts/model-judge.mjs`)
 
-**Off by default, never runs in CI, and gates nothing.** No key: it prints `skipped` and exits 0, so a
-pipeline can call it unconditionally. With `CI=true` it refuses even when a key is present, unless
-`MODEL_JUDGE_ALLOW_CI=1`.
+**Off by default, never run in CI, and gate nothing.** No usable provider: it prints `skipped` and
+exits 0, so a pipeline can call it unconditionally. With `CI=true` it refuses even when a provider is
+available, unless `MODEL_JUDGE_ALLOW_CI=1`.
+
+**Three modes.** `--mode=labels` reviews the corpus's ground truth. `--mode=engine` reviews the
+engine's stated reasons. `--mode=planner` is the one where **a model is in the loop**: it reads the
+user's task and the untrusted content, proposes the next tool call, and the engine judges *that
+proposal*. Nothing between the model and `decide()`.
+
+**Run them without an API key**, through a CLI you have already signed into:
+
+```
+MODEL_JUDGE_PROVIDER=codex       MODEL_JUDGE_SAMPLE=2 node scripts/model-judge.mjs --mode=planner
+MODEL_JUDGE_PROVIDER=claude-code MODEL_JUDGE_SAMPLE=2 node scripts/model-judge.mjs --mode=planner
+```
+
+`codex` uses the local Codex session; `claude-code` uses Claude Code's plan or OAuth login. If Claude
+Code asks for a token, mint one yourself with `export CLAUDE_CODE_OAUTH_TOKEN=$(claude setup-token)` —
+nothing in this repository reads, writes or logs it. `ANTHROPIC_API_KEY` still works and still bills
+the API; it is no longer required.
+
+**A planner run is an anecdote, not a result.** It is live, nondeterministic and supplementary; it is
+**not CI evidence** and it **does not make any deterministic number on this page stronger**. Its
+`STEERED, ALLOWED` rows are candidates for a human to read — several are the documented release valves
+where the table admits untrusted content into a selector — and adjudicating them automatically would
+mean tuning the classifier until it never flags anything.
 
 What it judges is **the ground-truth labels, not the engine**. The engine is deterministic and needs
 no model; what it cannot check is whether the labels it is graded against are defensible to anyone but

@@ -172,6 +172,13 @@ export {
 export { type GuidedResult, compareGuidedToRandom, searchGuided } from "./guided.js";
 
 export {
+  INTERLEAVINGS,
+  type Interleaving,
+  type TwoGuardResult,
+  twoGuardsOneReceipt,
+} from "./twoguard.js";
+
+export {
   LEDGER_SHAPES,
   type LedgerSearchResult,
   type LedgerShape,
