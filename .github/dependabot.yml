@@ -1,0 +1,67 @@
+# Dependabot is here for the dev toolchain and the CI actions. It is not here for the shipped
+# packages, because the shipped packages have nothing for it to update.
+#
+# WHY THIS FILE EXISTS AT ALL. The published packages have zero runtime dependencies: core imports
+# nothing, and the others import only each other. There is therefore no dependency-upgrade path
+# from npm into a consumer's process by way of anything this repo publishes. What is left is the
+# part that can actually reach a machine - the devDependencies that run on a maintainer's laptop
+# and in CI, and the GitHub Actions that run in this repo holding a token. A compromised formatter,
+# bundler or test runner rewrites what gets published; a compromised action can publish it. Those
+# are the two exposures, and this file watches exactly them.
+#
+# COOLDOWN, AND WHY IT IS THE SECOND LINE AND NOT THE FIRST. pnpm-workspace.yaml sets
+# minimumReleaseAge to 10080 minutes (7 days) and states why: near-real-time npm worm propagation,
+# which has spread end to end in under 30 minutes. Dependabot does not read that setting, so the
+# cooldown below restates the same intent in dependabot's own terms. Read it as two configs
+# agreeing rather than as enforcement. pnpm is the one that actually refuses to resolve a young
+# release, so if this cooldown is dropped, mistyped, or unsupported for an ecosystem, the failure
+# mode is a dependabot PR that goes red at the install step - not a fresh package entering the
+# lockfile quietly. That ordering is deliberate. Do not "fix" such a red PR by lowering
+# minimumReleaseAge; wait the week out.
+#
+# MINOR AND PATCH GROUPED, MAJORS LEFT ALONE. A grouped PR is not about tidiness. Ten separate
+# single-bump PRs a week get approved without being read, which is the same as having no review,
+# and the toolchain is precisely where an unread diff hurts. Majors stay ungrouped because a major
+# is a behaviour change that deserves its own diff next to its own CI run.
+#
+# WHAT THIS DOES NOT COVER, stated because it is easy to assume otherwise. The workflows pin
+# actions by major tag (actions/checkout@v4, pnpm/action-setup@v4, actions/setup-node@v4). A tag
+# repointed at a malicious commit is invisible both to dependabot and to this file: dependabot
+# updates the version it can see, and v4 is still v4. Commit-SHA pinning is the answer to that and
+# this repo does not do it yet. Dependabot also says nothing about whether an update is malicious,
+# only that it exists. Nobody should read a green dependabot PR as a supply-chain guarantee.
+
+version: 2
+
+updates:
+  # Root of the pnpm workspace. One entry covers packages/* and examples via the workspace
+  # lockfile; separate per-package entries would produce PRs that cannot be resolved alone.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      toolchain-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      actions-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"

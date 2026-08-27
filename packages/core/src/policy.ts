@@ -22,6 +22,7 @@
 // writes a try/catch, and that catch block is the bypass.
 
 import {
+  ALL_PARAM_ROLES,
   type ActionArg,
   type Capability,
   type Decision,
@@ -475,6 +476,14 @@ const STEERING_ROLES: ReadonlySet<ParamRole> = new Set<ParamRole>([
 ]);
 
 /**
+ * Every role the lattice actually knows.
+ *
+ * Needed because "not a steering role" and "not a role at all" are different facts, and only one of
+ * them is safe to treat as `content`. See `ceilingFor`.
+ */
+const KNOWN_ROLES: ReadonlySet<ParamRole> = new Set<ParamRole>(ALL_PARAM_ROLES);
+
+/**
  * The ceiling for one role of one capability.
  *
  * FAILING TO RATE A STEERING ROLE TIGHTENS IT, NEVER LOOSENS IT. An omitted steering role falls back
@@ -491,6 +500,14 @@ const STEERING_ROLES: ReadonlySet<ParamRole> = new Set<ParamRole>([
 export const ceilingFor = (row: CapabilityRow, role: ParamRole): Taint => {
   const explicit = row.roleCeilings[role];
   if (explicit !== undefined) return explicit;
+  // AN UNRECOGNISED ROLE IS NOT A NON-STEERING ROLE, and conflating the two failed OPEN. `ParamRole`
+  // is a closed union, so anything outside it is a caller bug or a payload nobody validated - but
+  // the check below only asks whether the role is in the STEERING set, and a typo is not, so it
+  // collected `defaultCeiling`: the LOOSEST ceiling the row has. On `email_send` that turned a
+  // WEB-derived recipient into an ALLOW purely by misspelling `sink_identity`. The one thing an
+  // unknown role cannot be assumed to be is harmless, so it admits clean input and nothing else.
+  // See DEFECTS_FOUND.md section 25.
+  if (!KNOWN_ROLES.has(role)) return "CLEAN";
   if (!STEERING_ROLES.has(role)) return row.defaultCeiling;
   return taintAtMost(row.defaultCeiling, "USER_CONTROLLED")
     ? row.defaultCeiling
@@ -571,34 +588,106 @@ const reason = (code: ReasonCode, message: string, extra?: Partial<Reason>): Rea
   ...(extra ?? {}),
 });
 
+/** A source resolved through its whole ancestry: the join, and everything that contributed. */
+interface ResolvedSource {
+  readonly taint: Taint;
+  readonly provenance: ReadonlySet<Provenance>;
+}
+
+/**
+ * The top of the lattice, attributed to nobody.
+ *
+ * Returned for the two malformed graphs: an edge pointing at a source that was never declared, and
+ * a cycle. Neither is memoised. A dangling edge is a fact about the graph, but a cycle is a fact
+ * about the PATH that reached it, and caching a path-dependent answer under a node id is how a
+ * cache starts lying.
+ */
+const UNRESOLVABLE: ResolvedSource = {
+  taint: "UNTRUSTED_EXTERNAL",
+  provenance: new Set<Provenance>(),
+};
+
 /**
  * Resolve a source to its taint, following `derivedFrom` so model output inherits the join of
  * everything it was shown.
  *
- * Cycles are possible in a hostile or buggy integration, so the walk carries a seen-set and treats
- * a cycle as the top of the lattice. Failing closed on a malformed graph is the only safe answer,
- * and it is cheaper than trusting the caller not to build one.
+ * ITERATIVE, AND THE THREE PIECES EACH PAY FOR THEMSELVES.
+ *
+ * `onPath` is the CURRENT PATH, not everything visited. Until v1.0 one set was shared across a
+ * node's siblings and never unwound, so a node reached by a SECOND path was misread as a cycle and
+ * resolved to the top of the lattice. A diamond - one document, two extracts, one summary - is the
+ * ordinary shape of `derivedOutput`, and every node in such a graph could be CLEAN while the join
+ * still came back UNTRUSTED_EXTERNAL. That failed closed, so it refused rather than leaked; it
+ * refused work nobody had a reason to refuse. See DEFECTS_FOUND.md section 23.
+ *
+ * `memo` is what makes unwinding affordable. Unwinding the path WITHOUT a memo is exponential in
+ * the number of stacked diamonds - a 61-node graph costs 4.2 million visits - which would have
+ * traded a wrong answer for a hang. An entry is written only once a node has fully resolved and
+ * left the path. A cycle resolves to the TOP of the lattice, so a value learned on a path that hit
+ * one can only ever be too strict: the memo cannot lower a taint, only raise it.
+ *
+ * The explicit `stack` is why the walk cannot throw. Recursion died with a RangeError on a chain
+ * about ten thousand deep, and a policy engine that throws is a policy engine whose caller writes a
+ * try/catch - and that catch block is the bypass. See DEFECTS_FOUND.md section 24.
  */
 function resolveTaint(
-  id: SourceId,
+  root: SourceId,
   byId: ReadonlyMap<string, Source>,
-  seen: Set<string>,
-): { readonly taint: Taint; readonly provenance: ReadonlySet<Provenance> } {
-  const found = byId.get(id as string);
-  if (found === undefined || seen.has(id as string)) {
-    return { taint: "UNTRUSTED_EXTERNAL", provenance: new Set<Provenance>() };
+  memo: Map<string, ResolvedSource>,
+): ResolvedSource {
+  interface Frame {
+    readonly id: string;
+    readonly parents: readonly SourceId[];
+    next: number;
+    taint: Taint;
+    readonly provenance: Set<Provenance>;
   }
-  seen.add(id as string);
 
-  let taint = taintOf(found.provenance);
-  const provenance = new Set<Provenance>([found.provenance]);
+  const onPath = new Set<string>();
+  const stack: Frame[] = [];
 
-  for (const parent of found.derivedFrom ?? []) {
-    const up = resolveTaint(parent, byId, seen);
-    taint = joinTaint(taint, up.taint);
-    for (const p of up.provenance) provenance.add(p);
+  /** Begin a node: either it answers at once, or a frame is pushed and this returns `undefined`. */
+  const enter = (id: string): ResolvedSource | undefined => {
+    const hit = memo.get(id);
+    if (hit !== undefined) return hit;
+    const found = byId.get(id);
+    if (found === undefined || onPath.has(id)) return UNRESOLVABLE;
+    onPath.add(id);
+    stack.push({
+      id,
+      parents: Array.isArray(found.derivedFrom) ? found.derivedFrom : [],
+      next: 0,
+      taint: taintOf(found.provenance) ?? "UNTRUSTED_EXTERNAL",
+      provenance: new Set<Provenance>([found.provenance]),
+    });
+    return undefined;
+  };
+
+  let settled = enter(root as string);
+  if (settled !== undefined) return settled;
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1] as Frame;
+
+    // Fold in whatever the previous turn of the loop finished.
+    if (settled !== undefined) {
+      frame.taint = joinTaint(frame.taint, settled.taint);
+      for (const p of settled.provenance) frame.provenance.add(p);
+      settled = undefined;
+    }
+
+    if (frame.next < frame.parents.length) {
+      settled = enter(frame.parents[frame.next++] as string);
+      continue;
+    }
+
+    stack.pop();
+    onPath.delete(frame.id);
+    settled = { taint: frame.taint, provenance: frame.provenance };
+    memo.set(frame.id, settled);
   }
-  return { taint, provenance };
+
+  return settled ?? UNRESOLVABLE;
 }
 
 /**
@@ -864,9 +953,57 @@ function labelUnambiguous(
 }
 
 /**
+ * Everything about the input that must hold before the engine can reason about it at all.
+ *
+ * Returns a description of the FIRST structural fault, or `undefined` when the shape is sound.
+ *
+ * WHY THIS EXISTS AT RUNTIME, when the types already say it. TypeScript guards the boundary it can
+ * see. It does not guard a JavaScript caller, a JSON payload deserialised straight off a queue, an
+ * `any` that crossed a package edge, or a hand-built object in a test - and the published package
+ * ships CJS and ESM to consumers with no compiler at all. This engine promises never to throw, and
+ * a promise that holds only for well-typed callers is not the promise the comment above `decide`
+ * makes. See DEFECTS_FOUND.md section 24.
+ *
+ * Every fault answers DENY, never ALLOW. A malformed decision request is a bug or an attack, and
+ * both deserve the same answer.
+ */
+function structuralFault(input: DecisionInput): string | undefined {
+  if (typeof input !== "object" || input === null) return "the decision input is not an object";
+
+  const action = input.action;
+  if (typeof action !== "object" || action === null) return "`action` is missing";
+  if (!Array.isArray(action.args)) return "`action.args` is not an array";
+  for (const arg of action.args) {
+    if (typeof arg !== "object" || arg === null)
+      return "an entry of `action.args` is not an object";
+    if (arg.derivedFrom !== undefined && !Array.isArray(arg.derivedFrom)) {
+      return `argument "${String(arg.name)}" has a \`derivedFrom\` that is not an array`;
+    }
+  }
+
+  if (!Array.isArray(input.sources)) return "`sources` is not an array";
+  for (const source of input.sources) {
+    if (typeof source !== "object" || source === null)
+      return "an entry of `sources` is not an object";
+    if (source.derivedFrom !== undefined && !Array.isArray(source.derivedFrom)) {
+      return `source "${String(source.id)}" has a \`derivedFrom\` that is not an array`;
+    }
+  }
+
+  if (input.receipts !== undefined && !Array.isArray(input.receipts)) {
+    return "`receipts` is not an array";
+  }
+  return undefined;
+}
+
+/**
  * Judge one proposed action.
  *
- * Pure, synchronous, reads no clock, generates no randomness, and never throws.
+ * Pure, synchronous, reads no clock, generates no randomness, and never throws - asserted by
+ * `packages/core/test/total.test.ts`, which drives every malformed shape through it and requires
+ * DENY rather than an exception. The sentence was FALSE from the day it was written until v1.0.1:
+ * a null input, a missing `action` and any non-array `sources` all threw. See DEFECTS_FOUND.md
+ * section 24 for why nothing here could have noticed.
  *
  * PRECEDENCE, and each ordering is a decision rather than an accident:
  *
@@ -892,9 +1029,29 @@ export function decide(
   input: DecisionInput,
   policy: CapabilityPolicy = CAPABILITY_POLICY,
 ): Verdict {
+  // ---- structural gate: a malformed request is denied, not thrown on --------------------------
+  const fault = structuralFault(input);
+  if (fault !== undefined) {
+    return {
+      decision: "DENY",
+      capability: (input?.action?.capability ?? "unknown_capability") as Capability,
+      taint: "UNTRUSTED_EXTERNAL",
+      provenance: new Set<Provenance>(),
+      reasons: [reason("malformed_input", `the decision input is malformed: ${fault}`)],
+      effects: [{ type: "LOG_DECISION" }],
+      spends: [],
+    };
+  }
+
   const { action } = input;
   const row: CapabilityRow | undefined = policy[action.capability];
   const byId = new Map<string, Source>(input.sources.map((s) => [s.id as string, s]));
+  /**
+   * One memo for the whole decision. Sources are shared between arguments far more often than not -
+   * that is what a context window IS - so resolving them once per action rather than once per
+   * argument is both faster and the only way the diamond repair stays linear.
+   */
+  const resolved = new Map<string, ResolvedSource>();
 
   // ---- unknown capability: a deployment fault, so fail closed rather than ask a human ----------
   if (row === undefined) {
@@ -926,8 +1083,8 @@ export function decide(
   for (const [argIndex, arg] of action.args.entries()) {
     let taint: Taint = "CLEAN";
     const provenance = new Set<Provenance>();
-    for (const from of arg.derivedFrom) {
-      const r = resolveTaint(from, byId, new Set<string>());
+    for (const from of arg.derivedFrom ?? []) {
+      const r = resolveTaint(from, byId, resolved);
       taint = joinTaint(taint, r.taint);
       for (const p of r.provenance) {
         provenance.add(p);

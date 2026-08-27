@@ -130,6 +130,13 @@ const defectCount = (
   readFileSync(join(ROOT, "docs/DEFECTS_FOUND.md"), "utf8").match(/^## \d+\./gm) ?? []
 ).length;
 
+// The mutation count was UNREGISTERED and stated in four places, so it went stale the moment an
+// entry was added and nothing said so. Counted from the script's own `MUTATIONS` array, the same
+// text `claimregistry.test.ts` greps to bind claims to mutation ids.
+const mutationCount = (
+  readFileSync(join(ROOT, "scripts/audit-mutations.mjs"), "utf8").match(/^ {4}id: "/gm) ?? []
+).length;
+
 const mapping = run("node scripts/mapping-report.mjs");
 const understated = [...mapping.matchAll(/Permitted when the tool is UNDERSTATED\s+(\d+)\/(\d+)/g)];
 const dhBroken = Number(understated[0]?.[1] ?? -1);
@@ -231,6 +238,17 @@ const ALL_FACTS = [
     patterns: [
       /\b(\d+)\s+generated blocks?\b/gi,
       /\bgenerated blocks?\s*[:\u2014-]\s*\*{0,2}(\d+)/gi,
+    ],
+  },
+  {
+    id: "mutation entries",
+    value: mutationCount,
+    source: "scripts/audit-mutations.mjs",
+    patterns: [
+      /\b(\d+)\s+critical branches\b/gi,
+      /\bPROVEN, for (\d+) listed branches\b/gi,
+      /\breports (\d+)\/\d+ caught\b/gi,
+      /\*\*(\d+)\/\d+ caught\*\*/gi,
     ],
   },
   {
@@ -404,7 +422,7 @@ if (unregistered.length > 12) console.log(`    ... and ${unregistered.length - 1
 // Lowering this number is the maintenance task. Raising it requires deciding, in a diff somebody
 // reviews, that a new hand-typed claim is worth it - which is the conversation that was never had
 // for any of the 112.
-const MAX_UNREGISTERED = 111;
+const MAX_UNREGISTERED = 110;
 let ratchetFailed = false;
 if (unregistered.length > MAX_UNREGISTERED) {
   ratchetFailed = true;

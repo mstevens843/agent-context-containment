@@ -299,3 +299,128 @@ describe("no document asserts more than the evidence supports", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// The same discipline, over SOURCE COMMENTS.
+//
+// Everything above walks `.md` files and this registry. That is where the guard was pointed, and it
+// is why an absolute claim written in a `//` comment could sit in the engine for the whole life of
+// the project while every gate stayed green: `decide()` said "it NEVER throws for any input
+// including a malformed one" and nine of sixteen malformed shapes threw. The claim was load-bearing
+// - the comment underneath it explains that a policy engine which throws is one whose caller writes
+// a try/catch, and that catch block is the bypass - and it was outside the apparatus built to stop
+// exactly this. See DEFECTS_FOUND.md sections 24 and 26.
+//
+// WHY THIS RULE CANNOT REUSE `negatedNear`. `never` and `cannot` are both members of NEGATION, so
+// `negatedNear(text, /\bnever\b/)` returns TRUE for "NEVER throws for any input" - the claim would
+// negation-exempt itself and the rule would fire on nothing. An absolute claim about behaviour is
+// admissible only when the comment NAMES what would catch it being false, or names the condition it
+// holds under. That is the escape-clause shape the Postgres rule already uses, not the proximity
+// shape the freeze rule uses.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * Source comments, as UNITS rather than lines.
+ *
+ * Consecutive comment lines merge into one unit and a blank or code line flushes, for the same
+ * reason `prose()` works in paragraphs: a claim and its qualification wrap across lines, and a rule
+ * that reads one line at a time flags the qualification for containing the word it qualifies.
+ */
+const comments = (): { file: string; line: string; n: number }[] => {
+  const out: { file: string; line: string; n: number }[] = [];
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      if (["node_modules", ".git", "dist", ".turbo"].includes(name)) continue;
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) {
+        walk(p);
+        continue;
+      }
+      // SHIPPED SOURCE ONLY. Test files describe what they assert, so they read as claims about
+      // behaviour while actually being the evidence for it.
+      if (!name.endsWith(".ts") || !p.includes(`${join("", "src", "")}`)) continue;
+      const lines = readFileSync(p, "utf8").split("\n");
+      let buf: string[] = [];
+      let start = 0;
+      const flush = (): void => {
+        if (buf.length > 0)
+          out.push({ file: p.slice(REPO.length + 1), line: buf.join(" "), n: start });
+        buf = [];
+      };
+      lines.forEach((l, i) => {
+        const m = l.match(/^\s*(?:\/\/|\*|\/\*\*?)\s?(.*)$/);
+        if (m !== null && !/^\s*\*\//.test(l)) {
+          if (buf.length === 0) start = i + 1;
+          buf.push((m[1] ?? "").trim());
+          return;
+        }
+        flush();
+      });
+      flush();
+    }
+  };
+  walk(join(REPO, "packages"));
+  return out;
+};
+
+/** The source-file form of the opt-out. Counted separately so it cannot spend a markdown slot. */
+const EXEMPT_SRC = "claims-guard:describes-the-rules";
+
+/**
+ * The absolute claims a comment may not make without saying what backs them.
+ *
+ * Deliberately narrow. An earlier draft included a bare `/\bimpossible\b/` and it fired on "present
+ * so the field is impossible to misread as a gate" - ordinary English, not a safety claim. That is
+ * the recorded lesson about `shows` in the reviewer rule: a rule which produces noise gets
+ * suppressed, and a suppressed rule protects nothing.
+ */
+const ABSOLUTE =
+  /\bnever\s+(?:throws?|fails?|leaks?|allows?)\b|\bfor any input\b|\bcannot\s+(?:be\s+)?(?:bypassed|defeated|escaped|forged)\b|\balways\s+(?:safe|correct|refuses?)\b/i;
+
+/**
+ * What makes an absolute claim admissible: it names its evidence, or it names its condition.
+ *
+ * Naming a test is the strong form. Naming an exception ("never throws EXCEPT on the three
+ * structural mistakes above") is the weak form and is still honest, because the reader can see the
+ * boundary. What is inadmissible is the bare absolute with nothing behind it.
+ */
+const BACKED =
+  /\.test\.ts|DEFECTS_FOUND|claims\.json|mutation|§\s*\d|section \d|asserted|pinned|\bexcept\b|\bother than\b|\bunless\b/i;
+
+describe("no source comment asserts more than the evidence supports", () => {
+  const units = comments();
+
+  it("there are comments to check", () => {
+    // The empty-set floor, and it is not decoration. The purity claim in section 19 passed for
+    // months while checking an empty list; a walker that silently matches nothing is the same bug.
+    expect(
+      units.length,
+      "the comment walker found almost nothing - it is checking an empty set",
+    ).toBeGreaterThan(400);
+  });
+
+  it("the source exemption is used sparingly, and every use describes a rule", () => {
+    const exempted = units.filter((u) => u.line.includes(EXEMPT_SRC));
+    expect(
+      exempted.length,
+      `${exempted.length} source comments are exempt from the claim guard`,
+    ).toBeLessThan(4);
+    for (const e of exempted) {
+      expect(
+        /rule|guard|check|assert|says|describ/i.test(e.line),
+        `${e.file}:${e.n} claims the exemption without describing a rule`,
+      ).toBe(true);
+    }
+  });
+
+  it("no comment makes an absolute claim about behaviour without naming what backs it", () => {
+    for (const { file, line, n } of units) {
+      if (line.includes(EXEMPT_SRC)) continue;
+      if (!ABSOLUTE.test(line)) continue;
+      expect(
+        BACKED.test(line),
+        `${file}:${n} asserts an absolute property with nothing behind it. Name the test that would fail, the condition it holds under, or the DEFECTS_FOUND section:\n    ${line.slice(0, 200)}`,
+      ).toBe(true);
+    }
+  });
+});

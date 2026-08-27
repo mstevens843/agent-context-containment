@@ -135,6 +135,48 @@ import {`,
     tests: "packages/core/test/contract.test.ts",
     why: "the contract that keeps decide() replayable and auditable. An import here is the first step to a clock, a network call, or a decision that cannot be re-derived from a log",
   },
+
+  // ---- v1.0.1: the three defects an outside reader found in one function -----------------------
+  // All three were in `resolveTaint`/`ceilingFor` and none of them was reachable by any gate in
+  // this repository, because no test and no corpus case ever declared a SOURCE with two parents.
+  // See DEFECTS_FOUND.md sections 23 to 25.
+  {
+    id: "dag-path-scoped",
+    claim:
+      "a provenance DAG is resolved by path, so a node reached twice is not mistaken for a cycle",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    stack.pop();
+    onPath.delete(frame.id);
+    settled = { taint: frame.taint, provenance: frame.provenance };
+    memo.set(frame.id, settled);`,
+    replace: `    stack.pop();
+    settled = { taint: frame.taint, provenance: frame.provenance };`,
+    tests: "packages/core/test/provenancedag.test.ts",
+    why: "defect §23. Removing BOTH the unwind and the memo restores the exact shipped bug: one seen-set accumulating across siblings, so an all-SYSTEM diamond resolved to the top of the lattice. It failed closed, so this mutation cannot leak - it makes the engine refuse ordinary clean work, which is how a control gets switched off",
+  },
+  {
+    id: "decide-is-total",
+    claim: "decide() answers every input, including a malformed one, and never throws",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `function structuralFault(input: DecisionInput): string | undefined {`,
+    replace: `function structuralFault(input: DecisionInput): string | undefined {
+  if (input !== input || true) return undefined;`,
+    tests: "packages/core/test/total.test.ts",
+    why: "defect §24. The engine claimed in a source comment that it never throws, and nine of sixteen malformed shapes threw. The claim mattered: a caller whose policy engine crashes writes a try/catch, and that catch block is the bypass",
+  },
+  {
+    id: "unknown-role-fails-closed",
+    claim:
+      "an unrecognised parameter role admits clean input only, rather than collecting the row's loosest ceiling",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `  if (!KNOWN_ROLES.has(role)) return "CLEAN";`,
+    replace: `  if (!KNOWN_ROLES.has(role) && KNOWN_ROLES.size < 0) return "CLEAN";`,
+    tests: "packages/core/test/total.test.ts",
+    why: "defect §25, and the only one of the three that could ALLOW something. ceilingFor asked whether a role was in the STEERING set; a misspelling is not, so it fell through to defaultCeiling and a WEB-derived recipient on email_send became an ALLOW purely by mislabelling the argument",
+  },
 ];
 
 const run = (cmd, opts = {}) => {

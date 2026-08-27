@@ -173,7 +173,14 @@ const STEERING: readonly ParamRole[] = ["sink_identity", "magnitude", "control"]
 /**
  * Read the names and ask whether they match the binding.
  *
- * Pure and total. Returns advisories, never throws, and gates nothing.
+ * Pure, and total over well-formed bindings: it returns advisories and gates nothing.
+ *
+ * NOT total over malformed input, and the comment here previously said it was. A binding list that
+ * is not iterable throws, like `contextOf` and for the same reason - this runs at WIRING time,
+ * where the only thing a caller could do with a caught error is proceed with a manifest they know
+ * is malformed. `decide()` makes the opposite trade deliberately, because it is on the decision
+ * path and a throw there would put a bypass in somebody's catch block. Nothing here gates anything,
+ * so there is no bypass to create. See DEFECTS_FOUND.md section 26.
  */
 export function semanticRisks(
   bindings: readonly ToolBinding[],

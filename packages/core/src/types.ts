@@ -302,7 +302,16 @@ export type ReasonCode =
   /** No input provenance was declared at all. Fail closed. */
   | "no_provenance_declared"
   /** The capability is not in the policy table. Fail closed; an undeclared capability is denied. */
-  | "unknown_capability";
+  | "unknown_capability"
+  /**
+   * The decision input was not shaped like a `DecisionInput`. Fail closed.
+   *
+   * TypeScript stops this at the boundary it can see. It does not stop a JavaScript caller, a JSON
+   * payload deserialised straight off a queue, or an `any` that crossed a package edge - and those
+   * are exactly the paths a hostile value travels. The engine answers DENY rather than throwing,
+   * because a throw makes the caller write a try/catch and that catch block is the bypass.
+   */
+  | "malformed_input";
 
 /** One reason, with enough context to render it to a human or assert on it in a test. */
 export interface Reason {

@@ -138,7 +138,7 @@ catches every overt attack here.
 
 ### Across all six splits
 
-The corpus is 98 hand-written and imported cases in six splits, plus 648 generated variants, reported
+The corpus is 102 hand-written and imported cases in six splits, plus 648 generated variants, reported
 side by side and **never pooled** — they are not samples from one population, and one headline number
 over all of them would claim more than any of them supports.
 
@@ -153,17 +153,17 @@ numbers, and three of them were wrong by the time anyone read them.
   split         n    blocked  allowed   escal    blocked  allowed   FN   FP
   holdout       15   9/9      6/6       0        3/9      3/6       6    3
   holdout_v2    6    4/4      2/2       0        0/4      2/2       4    0
-  tuning        25   13/13    12/12     1        1/13     12/12     12   0
+  tuning        29   15/15    14/14     1        1/15     14/14     14   0
   derived       9    7/7      2/2       0        0/7      2/2       7    0
   adaptive      8    6/6      2/2       0        0/6      2/2       6    0
   imported      34   34/34      -       0        0/34       -       34   0
 
   SILENT ATTACKS - no injection wording for any text detector to find
-                69   69/69                       0/69
+                71   71/71                       0/71
 
   UTILITY - what survives the policy
-    over-blocked   0/24 benign cases refused
-    under-blocked  0/73 attacks allowed
+    over-blocked   0/26 benign cases refused
+    under-blocked  0/75 attacks allowed
 ```
 <!-- /GENERATED -->
 
@@ -452,14 +452,14 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **534 tests across five packages.**
+the pure core grows a clock or an import. **578 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through
 retrieval, not ranking. The render-safety check on confirmed values catches bidi overrides and
 zero-width characters but cannot see pixels.
 
-**Scaffolding:** 98 hand-written and imported cases. This is a test suite, not a benchmark. **No
+**Scaffolding:** 102 hand-written and imported cases. This is a test suite, not a benchmark. **No
 adaptive attacker** — the adaptive split and the 648 generated variants are both mine, and nobody
 iterates against the engine. **No model in the loop anywhere**: the agent-run simulator declares its
 reactions, so it cannot surprise the policy the way a real planner would, and CaMeL's honest "77 vs
@@ -588,6 +588,10 @@ experiment rather than being told the result.
 
 ## Docs
 
+**Start here:** [QUICKSTART.md](docs/QUICKSTART.md) - the thesis, one diagram and one worked refusal,
+in five minutes. This README is the reference; that is the on-ramp.
+
+- [QUICKSTART.md](docs/QUICKSTART.md) - what this does and why, with a runnable example
 - [PRIOR_ART.md](docs/PRIOR_ART.md) - CaMeL, dual-LLM, the six patterns, adjacent npm packages
 - [THREAT_MODEL.md](docs/THREAT_MODEL.md) - who the attacker is, what is out of scope
 - [PROVENANCE_AND_TAINT.md](docs/PROVENANCE_AND_TAINT.md) - the lattice, and the argument-level splice
@@ -595,7 +599,7 @@ experiment rather than being told the result.
 - [RIGHT_ANSWER_WRONG_REASON.md](docs/RIGHT_ANSWER_WRONG_REASON.md) - grading mechanism, not verdict
 - [EVALS.md](docs/EVALS.md) - classifier vs containment numbers, mutants, freeze procedure
 - [LIMITATIONS.md](docs/LIMITATIONS.md) - the laundering gap and every declassification weakness
-- [DEFECTS_FOUND.md](docs/DEFECTS_FOUND.md) - eight findings the tests, the playground and the planner caught here
+- [DEFECTS_FOUND.md](docs/DEFECTS_FOUND.md) - every defect found in this project s own claim-checking machinery
 - [RETRIEVAL.md](docs/RETRIEVAL.md) - why retrieval is the canonical injection path
 - [DERIVED_CORPUS.md](docs/DERIVED_CORPUS.md) - what the derived split proves, and does not
 - [PLAYGROUND_PLAN.md](docs/PLAYGROUND_PLAN.md) - the CLI, and the browser version that is not built
@@ -623,6 +627,13 @@ experiment rather than being told the result.
 `agent-context-containment` because that is what it does. `taintwall`, `agent-taint`, `agent-ifc` and
 `capability-guard` were all available and each drops half the idea - taint without capabilities, or
 capabilities without provenance. Its sibling is called `durable-agent-outbox` for the same reason.
+
+## Contributing and security
+
+[CONTRIBUTING.md](CONTRIBUTING.md) describes the gates that will reject a change and, for each one,
+the defect that put it there. The rule that matters most: do not weaken a check to make it pass - fix
+the claim, or regrade it in `docs/claims.json`. Vulnerabilities go to [SECURITY.md](SECURITY.md),
+not to a public issue. Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ---
 

@@ -50,6 +50,13 @@ importers:
       '@agent-context-containment/retrieval':
         specifier: workspace:*
         version: link:../packages/retrieval
+    devDependencies:
+      '@types/node':
+        specifier: ^20.16.13
+        version: 20.19.43
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
 
   packages/classifier:
     dependencies:

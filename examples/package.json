@@ -7,24 +7,30 @@
   "author": "Mathew Stevens",
   "type": "module",
   "scripts": {
-    "web": "tsx web-research-agent.ts",
-    "email": "tsx email-assistant.ts",
-    "rag": "tsx rag-assistant.ts",
-    "wallet": "tsx wallet-assistant.ts",
-    "rag:pipeline": "tsx rag-pipeline.ts",
-    "playground": "tsx playground.ts",
-    "wallet:tuple": "tsx wallet-tuple.ts",
     "agents": "tsx agents/all.ts",
-    "agents:email": "tsx agents/email.ts",
+    "agents:code": "tsx agents/code.ts",
     "agents:devops": "tsx agents/devops.ts",
-    "agents:support": "tsx agents/support.ts",
+    "agents:email": "tsx agents/email.ts",
     "agents:payments": "tsx agents/payments.ts",
-    "agents:code": "tsx agents/code.ts"
+    "agents:support": "tsx agents/support.ts",
+    "email": "tsx email-assistant.ts",
+    "integration": "tsx integration-template.ts",
+    "playground": "tsx playground.ts",
+    "rag": "tsx rag-assistant.ts",
+    "rag:pipeline": "tsx rag-pipeline.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "wallet": "tsx wallet-assistant.ts",
+    "wallet:tuple": "tsx wallet-tuple.ts",
+    "web": "tsx web-research-agent.ts"
   },
   "dependencies": {
     "@agent-context-containment/classifier": "workspace:*",
     "@agent-context-containment/core": "workspace:*",
     "@agent-context-containment/ledger": "workspace:*",
     "@agent-context-containment/retrieval": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/node": "^20.16.13"
   }
 }

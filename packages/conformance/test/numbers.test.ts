@@ -113,7 +113,7 @@ describe("verify:numbers can fail, proven without touching a release document", 
 
   it("a stale registered number fails, and names the file and both values", () => {
     const doc = join(tmpdir(), "acc-stale-number.md");
-    // `98 hand-written and imported` is a registered fact. State it wrong.
+    // `102 hand-written and imported` is a registered fact. State it wrong.
     writeFileSync(doc, "The corpus is 4242 hand-written and imported cases.\n");
     try {
       const { failed, out } = runFast(doc);
@@ -129,7 +129,7 @@ describe("verify:numbers can fail, proven without touching a release document", 
   it("a correct registered number does not fail", () => {
     // The near-miss. A checker that failed on every document would pass the test above.
     const doc = join(tmpdir(), "acc-fresh-number.md");
-    writeFileSync(doc, "The corpus is 98 hand-written and imported cases.\n");
+    writeFileSync(doc, "The corpus is 102 hand-written and imported cases.\n");
     try {
       const { failed, out } = runFast(doc);
       expect(failed, `a CORRECT registered number was reported stale:\n${out}`).toBe(false);

@@ -869,7 +869,7 @@ exists, or a package script — and every entry was re-anchored.
 
 ### The 30 unguarded branches
 
-`scripts/audit-mutations.mjs` reports 8/8 caught. That is 8 branches somebody thought to list. A
+`scripts/audit-mutations.mjs` reports 11/11 caught. That is 11 branches somebody thought to list. A
 sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
 no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
 in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
@@ -1219,3 +1219,178 @@ ESM-only check.
 Every other test in this repository runs against the source tree. A consumer gets a different file
 set, a different module resolution, and `files` deciding what exists. That gap is where both defects
 above lived, and neither was reachable from a green suite.
+
+## 23. The provenance graph was a tree in the code and a DAG in reality
+
+An outside reader with no prior context read `resolveTaint` and asked what happened when two paths
+reconverged. Nothing in this repository could have asked that question.
+
+The walk carried a `seen` set to break cycles, and never removed anything from it. So the set meant
+*everything visited*, not *the current path*. A node reached by a **second** path was therefore
+indistinguishable from a node reached twice around a loop, and both resolved to the top of the
+lattice.
+
+The shape that triggers it is not exotic. It is the ordinary shape of `derivedOutput`:
+
+```
+        handbook  (SYSTEM)
+         /      \
+      left      right        both SYSTEM, both derived from handbook
+         \      /
+         summary            SYSTEM, derived from both
+```
+
+Every node is `SYSTEM`. Every node is clean. The join came back `UNTRUSTED_EXTERNAL`, and mailing an
+address out of the company handbook demanded a human declassification.
+
+**It failed CLOSED.** Nothing leaked, and `SECURITY.md` scopes the *inverse* case — "a taint join
+that loses a `derivedFrom` edge, so laundering through a hop clears the label". This is the other
+direction: a join that invents taint. That makes it a usability defect rather than a vulnerability,
+and usability defects in a security control are how the control ends up switched off.
+
+### Why nothing here caught it
+
+Zero of the 213 source nodes across every split declared more than one parent. No test declared a
+`Source` with two. The multi-parent cases that *do* exist are all **argument**-level, and those were
+always safe, because `decide` passed a fresh set per argument — so the corpus contained the
+reassuring shape and not the broken one.
+
+That is the general lesson and it is worth more than the fix: **the corpus encoded the graph the
+author had in mind, so it could not disagree with the code about the graph's shape.**
+
+### The fix, and why the obvious fix is wrong
+
+Unwinding the path — deleting from the set on the way out — is correct and, on its own, exponential.
+Twenty stacked diamonds is 4.2 million visits; a 61-node graph took 142ms. That trades a wrong answer
+for a hang.
+
+The walk is now iterative with a path-scoped `onPath` set **and** a memo. A cycle still resolves to
+the top of the lattice, and because that is the maximum, a value learned on a path that cut a cycle
+can only ever be too **strict**. The memo cannot lower a taint. `dag-t-002` is the negative control
+that pins that direction: the same graph with a `WEB` ancestor must still refuse.
+
+## 24. The engine's own "never throws" was false, and sat outside every gate
+
+Directly above `decide`, since the day it was written:
+
+> Pure, synchronous, reads no clock, generates no randomness, and never throws.
+
+and, at the top of the file, the reason it matters:
+
+> A policy engine that throws is a policy engine whose caller writes a try/catch, and that catch
+> block is the bypass.
+
+Nine of sixteen malformed shapes threw — `null`, a missing `action`, any non-array `sources`, a
+`derivedFrom` that was a string. A provenance chain about ten thousand deep died with a `RangeError`,
+because the walk in §23 recursed.
+
+The claim is load-bearing exactly as its own comment says. A caller whose policy engine crashes in
+production writes the catch block, and the natural thing to put in it is *proceed*.
+
+### The gap that let it live
+
+`docs/claims.json` graded `core-is-pure` — no imports, no clock, no randomness, nothing async — and
+said nothing about throwing. `scripts/audit-docs.mjs` scans `README.md` and this registry. **Neither
+scans source comments.** So the sentence was a release-facing claim living in the one place the
+apparatus built to catch release-facing claims did not look.
+
+"TypeScript prevents it" is not an answer: the published packages ship CJS and ESM to consumers with
+no compiler in the path, and decision inputs are routinely deserialised from JSON off a queue.
+
+`decide` now runs a structural gate first and answers `DENY` with a `malformed_input` reason. Every
+malformed input is denied; none is allowed.
+
+## 25. An unrecognised parameter role collected the loosest ceiling on the row
+
+The only defect in this pass that could **ALLOW** something.
+
+`ceilingFor` asked one question — is this role in the STEERING set? A misspelling is not in that set,
+so it fell through to `row.defaultCeiling`, which on an acting row is the *loosest* ceiling it has.
+
+```
+email_send, WEB-derived recipient, role "sink_identity"  ->  NEEDS_DECLASSIFICATION
+email_send, WEB-derived recipient, role "sink_identiy"   ->  ALLOW
+```
+
+One transposed letter and untrusted content chose the destination of an outbound mail. The same held
+for `file_write` and `web_fetch`.
+
+`ParamRole` is a closed union, so this is unreachable from well-typed TypeScript — and reachable from
+every path in §24: a JSON payload, an `any` across a package edge, a JavaScript caller. **"Not a
+steering role" and "not a role at all" are different facts**, and the code conflated them in the
+permissive direction. An unknown role now admits clean input and nothing else.
+
+## 26. Extending the prose guard to source comments, and what it found on its first run
+
+§24 is a hole in the *apparatus*, not just in the engine, so the apparatus was extended: the prose
+guard now walks `packages/*/src/**.ts`, merges consecutive comment lines into units the way the
+markdown walker merges paragraphs, and requires an absolute behavioural claim to name what backs it —
+a test, a `DEFECTS_FOUND` section, or the condition it holds under.
+
+**The rule cannot reuse `negatedNear`.** `never` and `cannot` are both members of `NEGATION`, so
+`negatedNear(text, /\bnever\b/)` returns `true` for "NEVER throws for any input": the claim
+negation-exempts itself and the rule fires on nothing. Absolute claims need an escape-clause rule,
+not a proximity rule. This is the third time in this file that a guard's own admissibility test was
+the thing that made it vacuous.
+
+On its first run over 825 comment units it flagged six, of which one was a genuine false claim
+nobody had noticed:
+
+> `toolrisk.ts`: *Pure and total. Returns advisories, never throws, and gates nothing.*
+
+`semanticRisks` threw on 81 of 121 malformed calls. Corrected rather than "fixed": it runs at wiring
+time, where a caught error only lets a caller proceed with a manifest they know is malformed, so
+throwing is the right behaviour and the comment was simply wrong about it. `decide` makes the
+opposite trade for the opposite reason, and now both say which one they are making.
+
+One draft pattern was removed before the rule shipped: a bare `/\bimpossible\b/` fired on "present so
+the field is impossible to misread as a gate" — ordinary English, not a safety claim. That is the
+recorded lesson about `shows` in the reviewer rule, met again.
+
+### And the counter that was measuring itself
+
+`audit-docs.mjs` printed `OK (${INJECTIONS.length}/${INJECTIONS.length})`. The injection list was its
+own denominator, so it read 5/5 by construction and could never notice a rule with no injection. It
+already could not: the two branch rules added in §21 had none, so the guard had been reporting full
+coverage over five of seven rules. There is now an independent `RULES` list, a rule without an
+injection is a failure, and the injection loop refuses to run at all on a tree where the prose guard
+is already red — the baseline gate `audit-mutations.mjs` has had since §19 and this script never had.
+
+## 27. The integration snippet in three READMEs did not compile
+
+While writing a consumer template against the documented API, the exact line printed in `README.md`,
+`docs/INTEGRATION.md` and `packages/ledger/README.md` failed to typecheck:
+
+```ts
+ledger: lockingFileLedger({ path: "./receipts.json", fs: nodeLockingFs(fs), now: Date.now }),
+```
+
+`nodeLockingFs` declares its port as `readFileSync: (p: string, e: string) => string`. `node:fs`
+types the encoding as `BufferEncoding` — a union of literals, not `string`. Parameters are
+contravariant under `strictFunctionTypes`, so `typeof fs` was not assignable to the port it was
+documented as satisfying. The first thing a new user copies did not compile.
+
+### Why it survived
+
+`examples/package.json` had no `typecheck` script. `turbo run typecheck` walks workspace packages and
+runs the task where it exists, so the entire `examples/` directory — fourteen files, every one of
+them a piece of documentation that executes — was **never typechecked by anything**. `pnpm test`
+never imported them either. They were run, and running is not typechecking: `tsx` strips types
+without checking them, so every example could have been type-broken and every gate would have stayed
+green.
+
+That is the same shape as §19 (the gates were outside CI) and §22 (the tarball is a different file
+set from the source tree): a category of artifact that no check was pointed at. The examples were the
+last one.
+
+### The fix, and the second error it immediately found
+
+The port is narrowed to what the file actually passes — `"utf8"` and `{ flag: "wx" }` — so the real
+module satisfies it. `examples/` gained a `tsconfig.json` and a `typecheck` script, and it is now
+part of `turbo run typecheck`.
+
+Turning the check on found a second, unrelated error that had been sitting in `wallet-tuple.ts`:
+`transfer` typed its parameter as `readonly (typeof recipient)[]`, and `recipient` is a
+`Declassification<string>` while `amount` is a `Declassification<number>`. The demonstration of
+correlated-parameter receipts — the point of that example — was passing an argument its own signature
+rejected. It is now typed as `ReceiptEvidence`, which is what `decide` actually takes.

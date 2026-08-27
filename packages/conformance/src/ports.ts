@@ -46,7 +46,9 @@ export interface ContainmentResponse {
  *   1. `decide` is a pure function of its argument. The suite may call it more than once with the
  *      same request and expects the same answer.
  *   2. It NEVER throws. A policy that throws on malformed input has a caller with a try/catch, and
- *      that catch block is the bypass. Refuse instead.
+ *      that catch block is the bypass. Refuse instead. This is a REQUIREMENT ON YOUR ENGINE and the
+ *      suite cannot check it for you - it drives the cases it was given, not every malformed shape.
+ *      The shipped engine is asserted by `packages/core/test/total.test.ts`; yours needs its own.
  *   3. It returns at least one reason for anything that is not ALLOW. A refusal nobody can audit is
  *      not a control.
  *

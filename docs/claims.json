@@ -75,7 +75,7 @@
     },
     {
       "id": "silent-attacks",
-      "claim": "69 of 69 silent attacks are contained; the classifier catches 0.",
+      "claim": "71 of 71 silent attacks are contained; the classifier catches 0.",
       "grade": "ADAPTER-PROVEN",
       "test": "packages/conformance/test/splits.test.ts",
       "generatedBy": "pnpm report",
@@ -171,6 +171,33 @@
       "generatedBy": "pnpm verify:numbers",
       "negativeControl": "editing any registered number to a wrong value makes `pnpm verify:numbers` exit 1 - demonstrated on five facts, and it caught README.md's stale test count at v1.0",
       "note": "Covers a REGISTERED SUBSET, not every number. A fact nobody listed is still unchecked prose, and the list is short and load-bearing rather than complete. v1.0 CORRECTION: this entry named packages/conformance/test/claimregistry.test.ts, which never invokes verify:numbers - so `pnpm test` passed 461/461 while the claim was FALSE (README said 454). verify:numbers shells out to `pnpm test` and therefore cannot run inside vitest; it is a CI gate, and a claimregistry test now asserts CI actually runs it. See DEFECTS_FOUND.md §19."
+    },
+    {
+      "id": "provenance-dag-resolves-by-path",
+      "claim": "A source reached by more than one path is resolved by its own provenance, not mistaken for a cycle; a real cycle still fails closed to the top of the lattice.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/provenancedag.test.ts",
+      "negativeControl": "mutation entry `dag-path-scoped`: removing the path unwind and the memo from resolveTaint in packages/core/src/policy.ts must fail the diamond tests",
+      "mutation": "dag-path-scoped",
+      "note": "Graded only from v1.0.1. Before it, one seen-set was shared across a node siblings and never unwound, so an all-SYSTEM diamond resolved to UNTRUSTED_EXTERNAL. It failed CLOSED, so this was over-refusal rather than leakage. Nothing here could have caught it: no test and no corpus case declared a source with two parents. Corpus cases `dag-t-001` and `dag-t-002` are the paired positive and negative. See docs/DEFECTS_FOUND.md."
+    },
+    {
+      "id": "decide-is-total",
+      "claim": "decide() returns a verdict for every input, including a malformed one, and never throws. Every malformed input is denied.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/total.test.ts",
+      "negativeControl": "mutation entry `decide-is-total`: neutralising the structural gate in packages/core/src/policy.ts must fail the totality tests",
+      "mutation": "decide-is-total",
+      "note": "The engine asserted this in a source comment from the day it was written, and it was false - a null input, a missing action and any non-array sources all threw. The claim sat outside the apparatus because scripts/audit-docs.mjs scans documents and this registry, never source comments. That gap is itself now covered. TypeScript does not close it: the published packages ship to consumers with no compiler in the path. See docs/DEFECTS_FOUND.md."
+    },
+    {
+      "id": "unknown-role-fails-closed",
+      "claim": "An unrecognised parameter role admits clean input only, instead of collecting the capability row loosest ceiling.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/total.test.ts",
+      "negativeControl": "mutation entry `unknown-role-fails-closed`: neutralising the KNOWN_ROLES check in packages/core/src/policy.ts must fail the role tests",
+      "mutation": "unknown-role-fails-closed",
+      "note": "The one defect in this pass that could ALLOW something. ceilingFor asked whether a role was in the STEERING set; a misspelling is not in that set, so it fell through to defaultCeiling and an attacker-controlled recipient on email_send became an ALLOW purely by mislabelling the argument. Not a non-steering role and not a role at all are different facts. See docs/DEFECTS_FOUND.md."
     }
   ]
 }

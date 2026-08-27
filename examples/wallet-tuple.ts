@@ -8,6 +8,7 @@
 // to THIS recipient - because each receipt answered a question about the other's business.
 
 import {
+  type ReceiptEvidence,
   actionId,
   admitAllowlistMember,
   admitConfirmedTuple,
@@ -44,7 +45,7 @@ const amount = admitNumericEnvelope({
   scope: SCOPE,
 });
 
-const transfer = (receipts: readonly (typeof recipient)[]) =>
+const transfer = (receipts: readonly (ReceiptEvidence | undefined)[]) =>
   decide({
     action: {
       id: actionId("t"),

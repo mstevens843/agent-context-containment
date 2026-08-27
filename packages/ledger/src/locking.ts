@@ -157,8 +157,16 @@ export function lockingFileLedger(options: LockingLedgerOptions): ReceiptLedger 
  * its own and a caller decides what "the filesystem" means.
  */
 export function nodeLockingFs(nodeFs: {
-  readFileSync: (p: string, e: string) => string;
-  writeFileSync: (p: string, c: string, o?: unknown) => void;
+  // NARROWED TO WHAT THIS FILE ACTUALLY PASSES, so that `nodeLockingFs(fs)` - the spelling in
+  // README.md, docs/INTEGRATION.md and this package README - typechecks against `node:fs`.
+  //
+  // It did not. `node:fs` types the encoding as `BufferEncoding`, a union of literals, and this
+  // port asked for a plain `string`; under `strictFunctionTypes` the parameter is contravariant, so
+  // the real module was not assignable to the port it was documented as satisfying. Nobody saw it
+  // because `examples/` had no `typecheck` script, so `turbo run typecheck` skipped every file that
+  // imports this. See DEFECTS_FOUND.md section 27.
+  readFileSync: (p: string, e: "utf8") => string;
+  writeFileSync: (p: string, c: string, o?: "utf8" | { flag: "wx" }) => void;
   renameSync: (a: string, b: string) => void;
   unlinkSync: (p: string) => void;
   statSync: (p: string) => { birthtimeMs: number };

@@ -93,8 +93,9 @@ export class IngestError extends Error {
  *
  * Throws rather than returns, and only here. This runs at WIRING time - assembling the context before
  * a decision - where the only thing a caller could do with a caught error is proceed with a context
- * they know is malformed. Compare `decide()`, which never throws, because a policy decision with a
- * caller's try/catch around it has a bypass in the catch block.
+ * they know is malformed. Compare `decide()`, which never throws for any input - asserted by
+ * `packages/core/test/total.test.ts` - because a policy decision with a caller's try/catch around it
+ * has a bypass in the catch block.
  */
 export function contextOf(items: readonly Ingested[]): {
   readonly sources: readonly Source[];
