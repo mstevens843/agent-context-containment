@@ -19,9 +19,18 @@
 // this repository missed, which is the argument for property search over case enumeration, made
 // concretely rather than in the abstract.
 
-import { CAPABILITY_POLICY } from "@agent-context-containment/core";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { ALL_PARAM_ROLES, CAPABILITY_POLICY, ceilingFor } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
-import { formatFindings, loosenedPolicy, searchAdversarially } from "../src/adversary.js";
+import {
+  ORACLE_KNOWN_ROLES,
+  ORACLE_STEERING,
+  formatFindings,
+  loosenedPolicy,
+  oracleCeiling,
+  searchAdversarially,
+} from "../src/adversary.js";
 
 /** Fixed, so a failure in CI reproduces on a laptop with no further information. */
 const SEED = 0xc0ffee;
@@ -104,5 +113,118 @@ describe("the search can fail", () => {
       expect(f.input.sources.length).toBeGreaterThan(0);
       expect(f.iteration).toBeGreaterThanOrEqual(0);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// THE FILE DEFENDING ITS OWN CLAIM.
+//
+// A refutation pass found that everything above passes with the section 31 fix REVERTED - swap
+// `oracleCeiling`/`oracleAtMost` back for core's `ceilingFor`/`taintAtMost` and the suite stays
+// green, because the negative control fires on the loosened-TABLE difference, which both oracles
+// see equally well. The only thing that caught a revert was the `unknown-role-fails-closed` entry
+// in scripts/audit-mutations.mjs: real, and one script away from the file making the claim.
+//
+// These are the direct guards. See DEFECTS_FOUND.md section 33.
+// ---------------------------------------------------------------------------------------------
+
+describe("the ceiling oracle is independent, and stays that way", () => {
+  const SRC = readFileSync(join(import.meta.dirname, "..", "src", "adversary.ts"), "utf8");
+
+  it("does not import the engine's ceiling function", () => {
+    // THE REVERT GUARD, and it is a source scan for the same reason `contract.test.ts` scans core
+    // for imports: the property "this module does not use that function" is not observable from
+    // behaviour when both agree. Reverting the fix means naming `ceilingFor` here, and naming it
+    // fails this line.
+    expect(
+      /\bceilingFor\b/.test(SRC.replace(/^\s*(?:\/\/|\*).*$/gm, "")),
+      "adversary.ts references ceilingFor outside a comment - the under-block oracle is no longer independent, which is exactly the section 31 defect",
+    ).toBe(false);
+    expect(
+      /\btaintAtMost\b/.test(SRC.replace(/^\s*(?:\/\/|\*).*$/gm, "")),
+      "adversary.ts references taintAtMost outside a comment - the ceiling comparison is the engine's again",
+    ).toBe(false);
+  });
+
+  it("refuses an unrecognised role, which is the section 25 rule", () => {
+    // The behaviour the oracle exists to have. Stated directly rather than inferred from a search
+    // result, so it is readable without running anything.
+    const row = CAPABILITY_POLICY.email_send;
+    expect(oracleCeiling(row, "not_a_role")).toBe("CLEAN");
+    expect(oracleCeiling(row, "sink_identiy")).toBe("CLEAN");
+    expect(oracleCeiling(row, "")).toBe("CLEAN");
+  });
+
+  it("agrees with the shipped engine on every legitimate role of every row", () => {
+    // The other half. An oracle that disagreed on a CORRECT input would be a false-positive
+    // generator, and the drift test below is what keeps this one honest as the table changes.
+    for (const [name, row] of Object.entries(CAPABILITY_POLICY)) {
+      for (const role of ALL_PARAM_ROLES) {
+        expect(oracleCeiling(row, role), `${name}.${role} disagrees with ceilingFor`).toBe(
+          ceilingFor(row, role),
+        );
+      }
+    }
+  });
+
+  it("its duplicated role set has not drifted from the real one", () => {
+    // Duplication is deliberate - deriving it would put the list under test on both sides - so the
+    // cost is drift, and drift here produces hundreds of spurious findings on a correct engine.
+    expect([...ORACLE_KNOWN_ROLES].sort()).toEqual([...ALL_PARAM_ROLES].sort());
+  });
+
+  it("its duplicated steering set still matches the engine's clamp behaviour", () => {
+    // STEERING_ROLES is not exported from core, so this compares BEHAVIOUR rather than membership:
+    // a steering role on a row whose default is above USER_CONTROLLED must clamp, and a
+    // non-steering one must not.
+    const row = CAPABILITY_POLICY.file_write;
+    for (const role of ALL_PARAM_ROLES) {
+      const clamps = ceilingFor(row, role) !== row.defaultCeiling;
+      const explicit = row.roleCeilings[role] !== undefined;
+      if (!explicit) {
+        expect(
+          ORACLE_STEERING.has(role),
+          `${role}: oracle and engine disagree about steering`,
+        ).toBe(clamps);
+      }
+    }
+  });
+});
+
+describe("a partial oracle policy is refused, not silently tolerated", () => {
+  it("throws rather than judging a missing row against the engine's own policy", () => {
+    // Section 33. The old code fell back per-capability, so an incomplete oracle table quietly
+    // became the tautology the option exists to prevent - and reported FEWER findings, which reads
+    // like good news.
+    expect(() =>
+      searchAdversarially({
+        iterations: 10,
+        seed: SEED,
+        policy: loosenedPolicy(),
+        oraclePolicy: { email_send: CAPABILITY_POLICY.email_send } as never,
+      }),
+    ).toThrow(/missing .* capability row/);
+  });
+
+  it("an empty oracle table is refused too, which is where it reported zero", () => {
+    expect(() =>
+      searchAdversarially({
+        iterations: 10,
+        seed: SEED,
+        policy: loosenedPolicy(),
+        oraclePolicy: {} as never,
+      }),
+    ).toThrow(/missing .* capability row/);
+  });
+
+  it("a complete oracle table is still accepted", () => {
+    // The near-miss: a check that rejected every oracle table would pass both tests above.
+    const r = searchAdversarially({
+      iterations: 200,
+      seed: SEED,
+      policy: loosenedPolicy(),
+      oraclePolicy: CAPABILITY_POLICY,
+    });
+    expect(r.findings.length).toBeGreaterThan(0);
   });
 });

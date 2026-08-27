@@ -715,7 +715,11 @@ function coverFor(
    *
    * See docs/DEFECTS_FOUND.md §11.
    *
-   * THIS IS THE v0.8 MITIGATION, KEPT AS DEFENCE IN DEPTH, AND IT IS NOW UNREACHABLE.
+   * THIS IS THE v0.8 MITIGATION, AND IT IS REACHABLE. The paragraph below said otherwise for three
+   * releases; a receipt search built in v1.0.1 reaches it directly and deleting the guard produces
+   * hundreds of findings. Two receipt objects sharing one id, bound to two different slots of one
+   * action, get past the slot model entirely - the model makes ONE receipt match one slot, and says
+   * nothing about two objects carrying the same id. See DEFECTS_FOUND.md sections 34 and 35.
    *
    * The class fix is the SLOT model above - `slotsOf`, `argPath`, and a label-only receipt matching
    * nothing where the label repeats. Together those make a receipt match AT MOST ONE slot, so
@@ -725,8 +729,11 @@ function coverFor(
    * the case where a caller gives two arguments the same explicit `path`". THAT SENTENCE WAS FALSE.
    * Colliding explicit paths are suffixed by rule 4 of `slotsOf` - args `[{name:"a",path:"p"},
    * {name:"b",path:"p"}]` produce slots `["p","p#1"]` - so a receipt with `argPath: "p"` admits
-   * exactly one of them and the guard still does not fire. An exhaustive sweep of 6,912 argument and
-   * receipt shapes reaches it zero times, with and without the guard present.
+   * exactly one of them and the guard still does not fire FOR THAT SHAPE. The sweep behind the old
+   * "unreachable" claim passed ONE receipt object per call, and one object can never collide with
+   * itself - it was structurally incapable of reaching this branch, so its zero was a fact about the
+   * sweep rather than about the guard. Its stated size is also not reproducible from anything in the
+   * tree. Both are recorded in DEFECTS_FOUND.md section 35.
    *
    * It is kept rather than deleted because it is a fail-closed backstop costing one set lookup, and
    * because the property that makes it dead - slot uniqueness - is exactly the kind of invariant a
@@ -1137,7 +1144,12 @@ export function decide(
       for (const rj of rejections) reasons.push(rj);
       if (covering !== undefined) {
         reasons.push(
-          reason("declassified", `"${a.arg.name}" admitted by ${covering.rule}`, {
+          // THE SLOT, NOT THE LABEL. Two arguments may share a label - `slotsOf` exists precisely
+          // because they may - so a reason naming only the label cannot say WHICH of them was
+          // admitted, and that is the one question a reader of a declassification reason has. The
+          // slot equals the label whenever the label is unique, so most messages are unchanged.
+          // See DEFECTS_FOUND.md section 37.
+          reason("declassified", `"${a.slot}" admitted by ${covering.rule}`, {
             value: undefined,
           }),
         );

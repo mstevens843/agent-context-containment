@@ -217,6 +217,16 @@
       "negativeControl": "mutation entry `coercion-is-a-tripwire`: making the coercion return a string instead of throwing must fail the taint tests",
       "mutation": "coercion-is-a-tripwire",
       "note": "A TRIPWIRE, NOT A MEMBRANE, and the claim is worded to keep that distinction. Propagation is impossible in JavaScript - a coercion returns a primitive and a primitive cannot carry a label - and a test demonstrates it by unwrapping the hostile value and relabelling the result CLEAN. That test does NOT exercise a coercion - a coercion throws, so there is no result to inspect - and it passes with the tripwire removed. It documents the boundary; the mutation entry is what defends the tripwire itself. Section 31 recorded the earlier wording here as an overstatement and this entry reproduced it; section 33 records that. What this closes is the accidental path: template interpolation, String(), and concatenation used to produce the string [object Object] with no signal. It does nothing about map(), unsafeUnwrap(), or a value that was never wrapped. See docs/DEFECTS_FOUND.md."
+    },
+    {
+      "id": "receipt-search-reaches-binding",
+      "claim": "A seeded search over receipt shapes finds no case where the engine admits an argument no valid receipt covers, and none where it refuses one that is covered.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/receiptadversary.test.ts",
+      "negativeControl": "mutation entries `receipt-one-slot` (one receipt admitting two arguments of an action) and `slot-collision-suffixing` (two arguments declaring the same explicit path collapsing to one slot) must each fail the receipt-search tests; and the in-test control runs the engine with every ceiling raised, judged against the SHIPPED table, which must report findings. This field previously described an empty-`liftableBy` control that had already been replaced: once the search selected rows BY liftability, that control had no rows to run on and reported zero by having nothing to do. See DEFECTS_FOUND.md section 37.",
+      "mutation": "receipt-one-slot",
+      "generatedBy": "pnpm adversary",
+      "note": "THE ADMISSION FLOOR IS THE POINT. The first version of this search never admitted a single receipt - every one used a rule its capability row does not lift by - so it explored only the refusal path while reporting what looked like broad coverage. A test now floors how many iterations reach ALLOW, because a search where no receipt ever works cannot tell a correct engine from one that refuses everything. What it does NOT cover: `spentReceipts` is a Set this process builds rather than a database, there are no multi-step runs, and it shares the lattice and the capability table data with the engine. See the receipts row of docs/LIMITATIONS.md and docs/DEFECTS_FOUND.md."
     }
   ]
 }

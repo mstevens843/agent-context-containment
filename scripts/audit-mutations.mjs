@@ -204,6 +204,27 @@ import {`,
     tests: "packages/conformance/test/malformed.test.ts",
     why: "defect §32, and the reason the malformed search was worth building. The structural gate added for §24 checked `sources` and `args` element by element and stopped at `Array.isArray` for receipts, so `receipts: [null]` reached `coverFor` and threw on `argPath`. A gate written to make the engine total that was itself not total, found on the first run of the search that could see it",
   },
+  {
+    id: "receipt-one-slot",
+    claim: "one receipt admits at most one argument of an action",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `    if (usedReceipts.has(r.id)) {`,
+    replace: `    if (usedReceipts.has(r.id) && false) {`,
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: "§20 filed this branch (P05) as UNREACHABLE and kept it as defence in depth, on the strength of a sweep that reached it zero times. It is reachable: a two-argument action carrying one receipt id reaches it directly, and deleting it produces 1232 findings in the receipt search. Until that search existed the branch was guarded by nothing - the whole suite stayed green without it. See §34",
+  },
+  {
+    id: "slot-collision-suffixing",
+    claim: "two arguments declaring the same explicit path get distinct slots",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: "    let unique = slot;\n    let n = 0;\n    while (used.has(unique)) unique = `${slot}#${++n}`;",
+    replace:
+      "    let unique = slot;\n    let n = 0;\n    while (used.has(unique) && false) unique = `${slot}#${++n}`;",
+    tests: "packages/conformance/test/receiptadversary.test.ts",
+    why: 'Rule 4 of `slotsOf` is what makes the slot model total: without it two arguments declaring path "p" collide, and one receipt covers both. The `duplicate_path` shape existed to watch this and could not - it issued ONE receipt, so the second argument went uncovered and the action was DENIED whether or not the suffixing ran, and deleting rule 4 produced zero findings. With a receipt per slot it produces 544 over_block findings. See §37',
+  },
 ];
 
 const run = (cmd, opts = {}) => {

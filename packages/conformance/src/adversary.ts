@@ -60,7 +60,12 @@ import {
 
 /** What the search found. `input` is carried so a finding can be replayed directly. */
 export interface AdversaryFinding {
-  readonly kind: "never_throws" | "under_block" | "taint_mismatch";
+  readonly kind:
+    | "never_throws"
+    | "under_block"
+    | "taint_mismatch"
+    | "over_block"
+    | "wrong_admission";
   readonly iteration: number;
   readonly capability: string;
   readonly detail: string;
@@ -145,22 +150,40 @@ const expectedTaint = (
  * oracle, and the cost is the point. If this rule and `ceilingFor` ever disagree, the search says so
  * and a human decides which one is wrong.
  */
-const ORACLE_STEERING: ReadonlySet<string> = new Set(["sink_identity", "magnitude", "control"]);
+export const ORACLE_STEERING: ReadonlySet<string> = new Set([
+  "sink_identity",
+  "magnitude",
+  "control",
+]);
 const ORACLE_RANK: Readonly<Record<string, number>> = {
   CLEAN: 0,
   USER_CONTROLLED: 1,
   TOOL_DERIVED: 2,
   UNTRUSTED_EXTERNAL: 3,
 };
-const oracleCeiling = (row: CapabilityRow, role: string): Taint => {
+export const oracleCeiling = (row: CapabilityRow, role: string): Taint => {
   const explicit = (row.roleCeilings as Readonly<Record<string, Taint>>)[role];
   if (explicit !== undefined) return explicit;
   if (!ORACLE_KNOWN_ROLES.has(role)) return "CLEAN";
   if (!ORACLE_STEERING.has(role)) return row.defaultCeiling;
   return (ORACLE_RANK[row.defaultCeiling] ?? 3) <= 1 ? row.defaultCeiling : "USER_CONTROLLED";
 };
-/** Also duplicated: `ALL_PARAM_ROLES` is data rather than logic, but the SET membership is the check. */
-const ORACLE_KNOWN_ROLES: ReadonlySet<string> = new Set([
+/**
+ * Also duplicated, and DELIBERATELY not derived from `ALL_PARAM_ROLES`.
+ *
+ * Deriving it would put the list under test on both sides again: the generator draws its roles from
+ * `ALL_PARAM_ROLES`, so if the oracle also read that list, a role added to it would be treated as
+ * known by both and the "unrecognised role" branch would never be exercised.
+ *
+ * The cost of duplicating is DRIFT, and drift here is a false-positive generator rather than a hole:
+ * adding a legitimate sixth role to `ALL_PARAM_ROLES` without adding it here produces hundreds of
+ * spurious `under_block` findings on a correct engine, which is worse than useless because it
+ * spends the credibility of the real ones. Measured at 276 findings when tried.
+ *
+ * So it stays duplicated and `adversary.test.ts` asserts the two sets are equal. Exported for that
+ * test alone - a drift check that cannot see both lists is not a drift check.
+ */
+export const ORACLE_KNOWN_ROLES: ReadonlySet<string> = new Set([
   "sink_identity",
   "magnitude",
   "selector",
@@ -287,6 +310,22 @@ export function searchAdversarially(opts: {
 }): AdversaryResult {
   const policy = opts.policy ?? CAPABILITY_POLICY;
   const oraclePolicy = opts.oraclePolicy ?? policy;
+  // A PARTIAL ORACLE TABLE IS A PROGRAMMING ERROR, NOT A DEGRADED MODE.
+  //
+  // This used to read `oraclePolicy[capability] ?? policy[capability]` at the point of use, which
+  // silently judged any capability the oracle table happened to omit against the ENGINE'S OWN row -
+  // the exact tautology the `oraclePolicy` option exists to prevent, reachable through the option
+  // that prevents it. Measured: against a fully loosened engine, a full oracle table found 172
+  // violations, a one-row table found 40, and an empty table found none, with no warning at any
+  // point. Refused up front instead, where a caller can see it. See DEFECTS_FOUND.md section 33.
+  if (opts.oraclePolicy !== undefined) {
+    const missing = Object.keys(policy).filter((c) => oraclePolicy[c as Capability] === undefined);
+    if (missing.length > 0) {
+      throw new Error(
+        `searchAdversarially: the oracle policy is missing ${missing.length} capability row(s) the engine has (${missing.join(", ")}). A partial oracle table would judge those rows against the engine's own policy, which is the tautology this option exists to avoid. Pass a complete table or omit oraclePolicy.`,
+      );
+    }
+  }
   const next = rng(opts.seed ?? 0x5eed_1234);
   const pick = <T>(xs: readonly T[]): T => xs[Math.floor(next() * xs.length)] as T;
   const capabilities = Object.keys(policy) as Capability[];
@@ -308,7 +347,8 @@ export function searchAdversarially(opts: {
 
   for (let i = 0; i < opts.iterations; i++) {
     const capability = pick(capabilities);
-    const row = oraclePolicy[capability] ?? policy[capability];
+    // No fallback: the completeness check above guarantees this row exists.
+    const row = oraclePolicy[capability] as CapabilityRow;
     const shape = pick(SHAPES);
     const provs = pick(provenanceSets);
     shapes[shape] = (shapes[shape] ?? 0) + 1;

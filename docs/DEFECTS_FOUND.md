@@ -869,7 +869,7 @@ exists, or a package script — and every entry was re-anchored.
 
 ### The 30 unguarded branches
 
-`scripts/audit-mutations.mjs` reports 13/13 caught. That is 13 branches somebody thought to list. A
+`scripts/audit-mutations.mjs` reports 15/15 caught. That is 15 branches somebody thought to list. A
 sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
 no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
 in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
@@ -1686,7 +1686,7 @@ the repository could have:
 
 ### The one that was not a defect, recorded because it nearly became one
 
-The same first run reported **793 further findings**, and every one of them was wrong. The property
+The same first run reported **hundreds of further findings**, and every one of them was wrong. The property
 said "nothing this generator emits may be ALLOWed", and the generator emits intact requests as well
 as broken ones — a twelve-thousand-node chain of `SYSTEM` sources is perfectly well formed and ALLOW
 is the correct answer to it.
@@ -1694,7 +1694,14 @@ is the correct answer to it.
 Believing that report would have meant "fixing" an engine that was right. The property now asks an
 **independent validity oracle** written in the search module, and only inputs that oracle calls
 broken carry it. That oracle is also what checks receipt elements — which is precisely why it
-disagreed with the engine and why section 32 is a real finding while the other 793 were noise.
+disagreed with the engine and why section 32 is a real finding while the rest were noise.
+
+The count is deliberately qualitative. An earlier draft of this section gave a precise figure, and a
+refutation pass could not reproduce it at any seed or iteration count - the number was monotone in
+iterations and stepped straight over it. A figure nobody can re-derive, sitting in the same register
+as figures that reproduce exactly (1,386 for section 23, 2,564 for section 25, 3,376 for section 24),
+is worse than no figure: it teaches a reader that the reproducible ones might be decorative too.
+The direction reproduces and the magnitude is "hundreds"; that is what this section now says.
 
 A property search is only as good as its property, and a property that fires on correct behaviour is
 worse than no search: it spends the credibility that makes the real finding believable.
@@ -1773,3 +1780,412 @@ byte-identical finding lists.
 believed them, and a reader told to refute found the gaps in an afternoon. `audit:release` ends by
 saying the deterministic half cannot do this and to *"get somebody to refute it."* Twice now that has
 been the only thing that worked.
+
+## 34. The receipt search, and four ways it was vacuous before it worked
+
+Row 14 of `docs/LIMITATIONS.md` named receipts as the largest gap in the property searches, and
+section 33 measured two shapes inside it that were weaker than the row claimed. Closing that meant a
+third search. It was wrong four times on the way in, and each way is the same failure this file keeps
+recording: a check that looks like coverage and is not.
+
+### It never admitted anything
+
+Every generated receipt used `user_confirmed_value`. `web_fetch` lifts only by `allowlist_member`,
+`clean_selection` and `echo_of_clean`, so on that row — and several others — the receipt was refused
+before any binding check ran. The first full run printed:
+
+> 20,000 explored | 18,947 lacked a valid receipt | 0 findings
+
+which reads like thorough coverage of the refusal path and was in fact a search that **never once
+reached ALLOW**. The over-blocking half of the property was unreachable; a policy that refused every
+receipt in existence would have passed it. The generator now draws its rule from the row's own
+`liftableBy`, and a test floors the number of iterations that reach admission.
+
+### The shape for the branch it existed to reach, masked that branch
+
+`reused_in_action` builds one receipt id bound to two arguments. The second copy kept the FIRST
+argument's `scope.source`, so the **source-binding** check rejected it before the **reuse** check was
+ever consulted. Engine and oracle agreed, for different reasons, and the shape reported nothing —
+including when the reuse branch was deleted outright.
+
+A generated case that is invalid in two dimensions tests only the first one the engine checks. The
+second copy is now valid in every dimension except the id it shares.
+
+### The control did not run the path it was controlling
+
+The first negative control raised every ceiling to the top of the lattice. Raise every ceiling and no
+argument is over its ceiling, so **no receipt is needed**, so the receipt path is never entered — the
+control reported zero findings by never exercising the thing it was controlling. It empties
+`liftableBy` instead: every argument stays over its ceiling and the engine loses the ability to
+admit, so a receipt the oracle reads as valid stops working and `over_block` fires.
+
+### And `P05` is not unreachable
+
+Section 20 filed the one-receipt-one-slot guard as **UNREACHABLE**, kept as defence in depth, on the
+strength of "an exhaustive sweep of argument and receipt shapes reaches it zero times". Two tests
+pinned the invariant that made it unreachable, and the branch itself was guarded by nothing — section
+33 measured that the whole suite stayed green with it deleted.
+
+It is reachable. A two-argument action carrying one receipt id reaches it directly and produces
+`receipt_already_consumed`; deleting the branch produces **1,232 findings** in the receipt search at
+12,000 iterations on seed `0x0dec0001`. The earlier sweep was over argument and receipt shapes that never included one id
+bound to two slots — the shape the branch exists for.
+
+`P05` now has a mutation entry, `receipt-one-slot`, and a search that reaches it. The disposition in
+section 20 was wrong, and it was wrong in the safe direction: the branch was there and correct the
+whole time. What was missing was anything that would have noticed if it were not.
+
+### The count that matters
+
+Three receipt branches previously defended by hand-written tests alone are now reached by a search,
+measured by deleting each and counting findings at 12,000 iterations on seed `0x0dec0001`: **reuse in
+one action 1,232**, **the role half of receipt binding 887**, **expiry 902**. The first was guarded by
+nothing and the second only by a file row 14 did not name.
+
+These three figures were first published as 902, 589 and 593, with **no seed**, and section 37 could
+not reproduce any of them. Two causes, both this file's fault rather than the engine's: the search
+gained a per-argument property and a corrected `duplicate_path` shape after the numbers were taken,
+and a figure with no seed is not a measurement anyone can check. The seed is stated here now, and
+`0x0dec0001` is the same one the test file uses.
+
+## 35. The number checker blamed the documents when the suite was red
+
+The worst finding in this file, because it was believed and acted on repeatedly.
+
+`verify:numbers` computed the test count like this:
+
+```js
+run("pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed' || true")
+```
+
+Vitest prints `Tests  1 failed | 254 passed` when anything fails. That does not match the pattern, and
+`|| true` swallowed the non-zero exit. So **a package with one failing test contributed ZERO**, the
+total silently dropped by a whole package, and the script reported:
+
+> STALE  README.md — tests: the document says 622, `pnpm test` produces 367
+
+against a README that was **correct**. The suite was red; the checker pointed at the prose.
+
+This fired at least four times across the v1.0.1 passes — 358, 364, 367 — and each time it was read
+as a circular-dependency artefact and worked around by editing the number. The mechanism was never
+looked at. A checker that mis-attributes in a plausible direction, with a precise-looking figure, is
+worse than one that simply breaks: it sends you to change the wrong file and it is persuasive while
+doing it.
+
+The rule the rest of the script already followed is that a fact which cannot be computed **leaves the
+list**. The test count now does that, says why in the output, and a deliberately failing test was
+added and removed to confirm it refuses rather than blames.
+
+### The same pass, inside the receipt search itself
+
+A refutation pass over the search from section 34 found the same class of problem inside it. This was
+a top-level `##` heading carrying no number, which made it a defect entry that no count included:
+`verify:numbers` derives "defects recorded" from `/^## \d+\./`, so an unnumbered entry is not
+uncounted-and-flagged, it is invisible. The two items below are the ones the code comments in
+`receiptadversary.ts` cite as section 35, which is where it belongs, so it is a subsection of 35 now.
+(The two unnumbered headings in the section 9-14 recap are commentary on that batch rather than defect
+entries, and are deliberately outside the numbering.) The first three findings are restated more fully, and with re-measured
+figures, in section 36; the figures here are the ones taken before the search gained its per-argument
+property, and section 37 explains why they no longer reproduce.
+
+**`wrong_name` was a second copy of `wrong_slot`.** It set `argName` AND `argPath`; the engine
+consults `argName` only when `argPath` is absent, so the name branch was never reached — deleting
+that branch produced zero findings. Fixed by leaving `argPath` off.
+
+**No shape covered "the receipt lifts too low".** Deleting the lift-level check produced zero
+findings; one hand-written test carried the whole branch. `lifts_too_low` added.
+
+**`duplicate_label` and `duplicate_path` are still weak** and are named here rather than claimed:
+each needs four simultaneous branch deletions before it produces anything, so as single-branch
+detectors they are decorative. They remain because they are the §11 shape and cost nothing, but the
+shape list is no longer described as "every way a receipt can be wrong".
+
+**`over_block` had a false positive on a correct engine.** It keyed on `taint_exceeds_ceiling`
+appearing anywhere in the verdict, and `coverFor` emits that code as a **per-receipt rejection** even
+when a later receipt admits the argument. Two receipts for one slot at different lift levels make the
+shipped engine return ALLOW with that code present — and the property would have fired. It was
+shielded only by an accident of the generator, which hard-codes every receipt to lift to the top of
+the lattice. It now keys on the decision.
+
+**The admission floor did not measure admission.** `allAdmitted` is true both when a receipt worked
+and when no argument ever needed one, so a generator drifted to clean provenance would report full
+coverage while admitting nothing — section 34's vacuity in a new costume. Measured: an all-`SYSTEM`
+provenance list reports 12,000 of 12,000 "admitted" with zero receipts used, and the floor still
+passed. It now counts iterations where a receipt genuinely admitted something.
+
+### And P05's disposition was corrected in one file out of three
+
+Section 34 said the "UNREACHABLE" disposition was wrong. It updated `DEFECTS_FOUND.md` and left
+`packages/core/src/policy.ts` and `STATUS.md` still asserting it — including a sweep figure that no
+command in the tree reproduces, and whose sweep passes **one receipt object per call**, which cannot
+collide with itself and so was structurally incapable of reaching the branch. Its zero was a fact
+about the sweep. All three now say the same thing, and the unreproducible figure is gone.
+
+**The pattern, for the fourth consecutive section:** the work that closes a defect introduces its own,
+and only a reader told to refute has ever found them. The searches did not find these; a person
+reading the searches did.
+
+## 36. Decorative shapes, a search that skipped the money rows, and two checks guarding nothing
+
+A refutation pass over section 35's work. Everything here is a defect in the searches themselves
+rather than in the engine, which is now the usual pattern.
+
+### Three shapes named a branch and reached a different one
+
+The receipt shape list called itself *"every way a receipt can be wrong"*. Measured by deleting each
+engine branch and counting findings, three of its entries reached nothing on their own:
+
+- **`wrong_name`** set `argName` AND `argPath`. The engine consults `argName` only when `argPath` is
+  absent, so it was a second copy of `wrong_slot` and the name branch was reached by no shape at all.
+- **No shape covered the lift level.** Deleting the check that a receipt lifts high enough produced
+  zero findings; one hand-written test carried the entire branch.
+- **`duplicate_label` and `duplicate_path`** each needed FOUR simultaneous deletions before saying
+  anything, because both decision-level properties key on ALLOW, and removing one guard still leaves
+  the second argument uncovered and the action refused.
+
+`wrong_name` now omits `argPath` (1,034 findings on that branch), `lifts_too_low` is new (1,028), and
+a third property — **`wrong_admission`** — compares the arguments the engine says it `declassified`
+against the ones the oracle covers. That is per-argument rather than per-decision, and it makes
+`duplicate_label` a single-branch detector: deleting the label-ambiguity guard now produces 576
+findings, all from that shape.
+
+**`duplicate_path` still is not one, and is now labelled contextual rather than counted.** It builds
+the section 11 shape — two arguments carrying the same explicit path — and no single deletion isolates
+it, because `slotsOf`'s collision suffixing and the `P05` reuse guard cover for each other: remove the
+suffixing and `P05` refuses the second argument; remove `P05` and the suffixing has already given them
+different slots. That mutual protection is worth exercising and is not a detector, and the shape list
+no longer claims otherwise.
+
+> **Section 37 refuted this paragraph.** The mutual-protection story was wrong. The shape issued ONE
+> receipt, so the second argument was uncovered and the action DENIED whether or not the suffixing
+> ran — the two guards were not covering for each other, the shape simply could not tell the cases
+> apart. With one receipt per slot, deleting rule 4 produces **544 `over_block` findings** and
+> `slot-collision-suffixing` is a mutation entry. A plausible mechanism was accepted in place of a
+> measurement, which is the same mistake this section is about.
+
+### The search skipped every row where a receipt matters most
+
+It filtered out `requiresConfirmation` rows because such a row answers `NEEDS_REVIEW` even when every
+argument is admitted, so `ALLOW` could not express "the receipt worked". That dropped **payment** and
+**transaction_broadcast** — the two highest-stakes rows a receipt can lift — and it is the graph
+search's own blindness, repeated inside the search built to answer it.
+
+The generator now supplies `confirmed: true` on a confirming row, which is what a shell does after
+asking a human, so the receipt path reaches `ALLOW` there too. Six of ten rows are searched. The four
+excluded — `text_response`, `transaction_prepare`, `account_modify`, `wallet_sign` — lift by nothing,
+so a receipt cannot admit anything on them; that exclusion is **computed from the table** by
+`receiptSearchScope` rather than asserted, and no fake receipt path was forced onto a row that should
+not lift.
+
+### And it never generated the two roles a deployer is most likely to tighten
+
+Arguments were drawn only from `sink_identity`, `magnitude` and `control`. A total bypass of receipt
+binding for `payload` and `selector` passed the entire suite. Not a live hole in the shipped table —
+no row rates those roles, so they inherit `defaultCeiling`, and every row whose default sits below the
+top requires confirmation — but live for any deployer manifest that tightens them, which is exactly
+what `docs/CAPABILITY_MANIFESTS.md` tells a deployer to consider. `payment` already makes them tight:
+its default is `TOOL_DERIVED`, so an untrusted payload there needs a receipt. Both roles are now
+generated.
+
+### Two registered facts passed their controls and guarded nothing
+
+`CI claim gates` and `generated blocks` matched **zero sentences in every shipping document**. Both
+passed their negative controls, because a deliberately wrong number in a throwaway document *is*
+caught — the pattern works. Nothing established that it fires on anything real. That is section 16 at
+the level of a single fact: a check over an empty set.
+
+`verify:numbers` now computes per-fact coverage and **fails, naming the fact**, when a registered
+fact matches nothing, unless it opts out with `computedOnly: true`. Both were given the sentence they
+should have been guarding rather than the opt-out.
+
+### The ratchet punished the maintenance it asked for
+
+The script printed *"Lower MAX_UNREGISTERED to lock the improvement in"*, and the suite asserted the
+printed count **equalled** the ceiling. So lowering the ceiling turned the tests red, and so did
+removing an unregistered sentence. A ratchet you are punished for tightening is a ratchet nobody
+tightens, and it had sat at exactly its ceiling for four passes as a result.
+
+One more, found while fixing the above: the receipt search s negative control emptied `liftableBy`, and once the search began SELECTING rows by liftability that control had no rows to run on and reported zero by having nothing to do. It is a loosened-ceiling engine judged against the shipped table now, which is a broken engine rather than an absent one.
+
+The assertion is a bound now, and four tests pin the directions: at-or-below passes, lowering to the
+live count passes, lowering below it fails with `RATCHET BROKEN`, and raising stays bounded by the
+meta-test.
+
+## 37. A vacuous shape, a report printing the inverse, a suite that hid its own failures, and three figures that never reproduced
+
+A refutation pass over section 36's work. As in 34, 35 and 36, every defect here is in the checking
+apparatus rather than in the engine. Two of them were introduced by section 36 itself.
+
+One difference from the previous three passes is worth stating plainly: **the refutation that opened
+this section was itself partly wrong**, and taking it at face value would have put a fabricated number
+into the record. See "What the refutation got wrong" at the end.
+
+### `pnpm test` reported every test passing and exited 1
+
+The worst item here, because it makes every other number in this file provisional if left standing.
+
+`turbo.json` declared `"test": { "dependsOn": ["^build"] }` — upstream builds only. But every package
+imports **itself** by name in at least one test (`packages/ledger/test/guarantees.test.ts` imports
+`@agent-context-containment/ledger`), so a test run reads the package's own `dist`, and every
+`tsup.config.ts` sets `clean: true`. Each package's build was therefore scheduled **concurrently with
+its own tests**, and emptied `dist` while they were importing out of it.
+
+Measured on three consecutive `turbo test --force` runs:
+
+| run | test files | tests reported | exit |
+|---|---|---|---|
+| 1 | 6 passed | 89 | 0 |
+| 2 | **1 failed**, 5 passed | 57 | 1 |
+| 3 | **2 failed**, 4 passed | 37 | 1 |
+
+Zero individual test failures in every run. The files died at import, so their tests were never
+counted — and a suite that reports *"Tests 37 passed (37)"* next to a red exit code invites exactly
+one response, which is to run it again until it is green. It is section 35's defect in a new place:
+the number of tests that passed was not evidence about the code.
+
+Invisible locally, because a warm turbo cache runs nothing. `test` and `typecheck` now depend on
+`build` as well as `^build`; three consecutive cold runs give 633 tests and a green exit. Since
+`turbo.json` rejects unknown keys and cannot hold a comment, the reasoning and a negative control live
+in `packaging.test.ts`, together with two near-miss tests: one asserting some package really does clean
+its `dist`, one asserting some test really does self-import, because if either stopped being true this
+rule would be guarding a hazard that no longer exists.
+
+### `duplicate_path` tested nothing, and section 36 explained why with a mechanism instead of a measurement
+
+Section 36 concluded that `duplicate_path` could not be a single-branch detector because `slotsOf`'s
+collision suffixing and the `P05` reuse guard cover for each other. That story is wrong, and it was
+never measured.
+
+The actual cause is simpler: the shape issued **one receipt** for a two-argument action, so the second
+argument was uncovered and the action was **DENIED whether or not the suffixing ran**. Deleting rule 4
+produced **zero** findings, while two hand-written tests caught it — so the branch was real, reachable,
+and outside the search that claimed the territory.
+
+With **one receipt per slot** the two guards separate cleanly. Suffixing intact: slots `p` and `p#1`,
+both matched, ALLOW. Suffixing removed: both slots are `p`, the `p` receipt admits the first argument,
+the `p#1` receipt matches nothing, `P05` refuses to reuse the first — DENY, while the oracle still says
+ALLOW. Measured at 12,000 iterations on seed `0x0dec0001`: **544 `over_block` findings**, zero on the
+shipped engine. `slot-collision-suffixing` is now a mutation entry, so it is re-checked rather than
+recorded.
+
+### The adversarial report printed the complement of its own admission count
+
+`scripts/adversary-report.mjs` printed `receipts.explored - receipts.cleanExplored` as *"reached
+admission"*. `cleanExplored` **is** the admission count. The line reported the refusals — every run,
+overstating the search's reach by roughly six times, in the one output written for a human who wants
+to push on the searches.
+
+### The receipt search's field was `argPath`, and the action argument's field is `path`
+
+The generator wrote `argPath` onto each generated action argument. `ActionArg`'s field is `path`;
+`argPath` is the **receipt's** field. TypeScript accepted it, `slotsOf` never saw an explicit path, and
+the oracle's slot model diverged from the engine's on every shared-name shape.
+
+**Measured effect on the reported numbers: none.** An A/B at 12,000 iterations gives 1,780 admissions
+and zero findings either way, because `covers` rejected those receipts for an independent reason and
+engine and oracle agreed for the wrong reason — the section 34 failure mode again. Fixed because a
+generator that does not build the input it claims to build is a defect whether or not today's numbers
+move, and because the corrected `duplicate_path` above depends on `path` actually binding.
+
+### The ratchet's own tests rewrote a shipped script in place
+
+`numbers.test.ts` edited `MAX_UNREGISTERED` inside `scripts/verify-numbers.mjs` and restored it in a
+`finally`. A killed run leaves the repository holding a script that lies about its own ceiling, and an
+interrupted suite was observed leaving `MAX_UNREGISTERED = 9999` behind. The phantom-fact control did
+the same thing.
+
+Both now drive the script through `CONTAINMENT_MAX_UNREGISTERED` and `CONTAINMENT_PHANTOM_FACT`, the
+same arrangement as `CONTAINMENT_EXTRA_DOC`, which exists so no test writes into a release document.
+The hook cannot become a bypass: the meta-test matches the **shipped line**, `/const MAX_UNREGISTERED =
+Number\(process\.env\.CONTAINMENT_MAX_UNREGISTERED \?\? (\d+)\);/`, not the resolved value, so an
+override changes what a test run sees and never what ships. CI does not set either variable.
+
+### `wrong_admission` compared labels, on the two shapes whose labels collide
+
+The per-argument property added in section 36 extracted the admitted argument from the engine's
+`declassified` reason with `/"([^"]+)"/` and compared it against a set of argument **names**. Both
+`duplicate` shapes give their two arguments the same label — that is what they are for — so the set
+collapsed them to one entry, and the property written to watch those two shapes was blind on exactly
+those two shapes. The pattern also took the first quoted run anywhere in the message and could not
+match an empty label.
+
+The engine now names the **slot** in that reason rather than the label. That is a product fix as much
+as a test fix: `slotsOf` exists precisely because two arguments may share a label, so a reason naming
+only the label cannot say which argument was admitted, which is the one question a reader of a
+declassification reason has. The slot equals the label wherever the label is unique, so most messages
+are unchanged, and nothing in the tree matched the old string. The search keys on slots and anchors its
+pattern to `/^"([^"]*)" admitted by /`.
+
+### `receiptSearchScope` computed the honest answer and had no callers
+
+`docs/LIMITATIONS.md` row 14 and the NOT COVERED block of `pnpm adversary` both said the receipt search
+ran on **"four of the ten"** capability rows, and both named `payment` and `transaction_broadcast`
+among the rows never generated. Section 36 had brought confirming rows in. Both are searched. Six of
+ten rows are searched and the four excluded ones lift by nothing.
+
+`receiptSearchScope` had computed that correctly since it was written, and **nothing called it** — it
+was exported, documented as the thing that keeps the report from drifting, and connected to no report.
+`pnpm adversary` now prints the computed scope, and a test ties row 14's sentence to it.
+
+### Three figures in section 34 that no longer reproduced
+
+Section 34 published **902 / 589 / 593** for reuse-in-one-action, the role half of receipt binding, and
+expiry, **with no seed**. None reproduce. Re-measured at 12,000 iterations on seed `0x0dec0001`:
+
+| branch deleted | findings | kinds |
+|---|---|---|
+| `P05`, one receipt one slot | **1,232** | 616 `under_block`, 616 `wrong_admission` |
+| value binding (`admitted`) | **1,968** | 428 / 576 / 964 `over_block` |
+| the `argName` label branch | **1,034** | 424 / 610 |
+| lift level (`taintAtMost`) | **1,028** | 425 / 603 |
+| rule not in `liftableBy` | **1,022** | 420 / 602 |
+| source binding (`scope.source`) | **989** | 406 / 583 |
+| expiry | **902** | 370 / 532 |
+| the role half of receipt binding | **887** | 366 / 521 |
+| the label-ambiguity guard | **576** | 576 `wrong_admission` |
+| `slotsOf` rule 4 | **544** | 544 `over_block` |
+| *(none — shipped engine)* | **0** | — |
+
+Two causes, both this file's rather than the engine's: the search gained a per-argument property and a
+corrected `duplicate_path` after those numbers were taken, and **a figure published without a seed is
+not a measurement anyone can check**. Every figure in this section names its seed and its iteration
+count.
+
+### What the loosened-ceiling control does not license
+
+The in-test control raises every ceiling and judges the engine against the shipped table. Measured at
+3,000 iterations: 347 `under_block` findings, and zero when judged against its own loosened table — so
+it is a real control. But every finding it produces is a **ceiling** breach, and a loosened engine
+needs no receipts at all, so it says nothing about whether the search can detect a **binding** defect.
+The table above is what licenses that claim, and two of its rows are `pnpm audit:mutations` entries.
+The control's docstring said the opposite: that it was the right control *for binding*.
+
+### And a smaller one, found while measuring the table above
+
+The first attempt at that table ran every mutation inside one Node process, rebuilding between them.
+All ten rows returned **1,232 findings with identical kind splits**. ESM caches a module per process,
+so `@agent-context-containment/core` was loaded once and every row measured the *first* mutant. Only
+the impossible uniformity of the output gave it away. Each row now runs in its own process. Nothing
+shipped depends on this — it is recorded because a measurement harness that silently reports one
+result ten times is the same class of defect as the searches in 34 and 36, and it nearly put ten
+fabricated numbers into the table above.
+
+### What the refutation got wrong
+
+The refutation that opened this section reported the `argPath`/`path` bug as inflating the admission
+floor with **"544 phantom admissions"**. It does not: an A/B measurement gives 1,780 admissions with
+and without the bug. The number 544 is real but belongs to a different measurement entirely — the rule
+4 mutation, above. Had that figure been copied into this file on the refutation's authority, section 37
+would have published a fabricated number while correcting section 34 for publishing unreproducible
+ones.
+
+Three of the refutation's findings were confirmed by direct measurement, one was confirmed but with a
+fabricated magnitude, and its explanation of the `duplicate_path` weakness was wrong in the same way
+section 36's was — a plausible mechanism offered in place of a measurement.
+
+**The pattern, for the fifth consecutive section:** the work that closes a defect introduces its own.
+The new one, and the reason this section is longer than it should be: **a refutation is not evidence
+either.** Sections 34 through 36 each ended by noting that only a reader told to refute found the
+defects. The correction is that such a reader is a source of hypotheses, and the measurement is what
+makes them findings. Two of the numbers in this section exist because a claim was checked instead of
+believed.

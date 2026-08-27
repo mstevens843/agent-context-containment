@@ -15,8 +15,10 @@
 import {
   formatFindings,
   loosenedPolicy,
+  receiptSearchScope,
   searchAdversarially,
   searchMalformed,
+  searchReceipts,
 } from "../packages/conformance/dist/index.js";
 import { CAPABILITY_POLICY } from "../packages/core/dist/index.js";
 
@@ -57,6 +59,20 @@ console.log(`  findings: ${malformed.findings.length}`);
 if (malformed.findings.length > 0) console.log(formatFindings(malformed));
 console.log("");
 
+// ---- search 3: receipts ----------------------------------------------------------------------
+const receipts = searchReceipts({ iterations: malformedIterations, seed });
+console.log(
+  // `cleanExplored` IS the admission count for this search. The first version printed its
+  // COMPLEMENT and so over-reported the search's reach by about six times, on every run.
+  `  RECEIPT SEARCH   ${receipts.explored} decisions   ${receipts.cleanExplored} reached admission`,
+);
+for (const [shape, n] of Object.entries(receipts.shapes).sort((a, b) => b[1] - a[1])) {
+  console.log(`    ${shape.padEnd(18)} ${String(n).padStart(8)}`);
+}
+console.log(`  findings: ${receipts.findings.length}`);
+if (receipts.findings.length > 0) console.log(formatFindings(receipts));
+console.log("");
+
 // ---- the controls, every time --------------------------------------------------------------------
 // A search whose control is optional is a search nobody re-checks. The graph control runs the engine
 // on a table whose ceilings are raised and judges it against the SHIPPED ceilings; judging it against
@@ -89,40 +105,84 @@ console.log(
 );
 console.log("    section 24  decide throwing, or allowing a malformed request     malformed, both");
 console.log("    section 32  a null receipt element reaching coverFor             malformed, both");
+console.log(
+  "    section 34  one receipt admitting two arguments (P05)            receipts, under_block",
+);
+console.log(
+  "    ---         the role half of receipt binding                     receipts, under_block",
+);
+console.log(
+  "    ---         receipt expiry                                       receipts, under_block",
+);
 console.log("");
 console.log("  NOT COVERED, and named rather than left to be assumed:");
 console.log("");
+// DERIVED FROM THE TABLE, NOT TYPED HERE. The hardcoded version of these four lines said the
+// search ran on "four of the ten" rows and named payment, wallet_sign, account_modify and
+// transaction_broadcast as never generated. Two of those four ARE searched, and have been since
+// confirming rows were brought in. `receiptSearchScope` computed the true answer the whole time
+// and nothing called it, so the function and the sentence drifted apart with no check between
+// them. Printing the computed value is the fix; the drift could not have survived it.
+// See DEFECTS_FOUND.md section 37.
+const scope = receiptSearchScope(CAPABILITY_POLICY);
 console.log(
-  "    receipts and declassification    no receipt is ever generated. Expiry, replay, wrong",
+  `    receipt search scope            ${scope.searched.length} of the ${scope.searched.length + scope.excluded.length} capability rows. Searched:`,
+);
+console.log(`                                    ${scope.searched.join(", ")}.`);
+console.log("                                    Excluded, and why:");
+for (const e of scope.excluded) {
+  console.log(`                                      ${e.row.padEnd(22)} ${e.why}`);
+}
+console.log(
+  "    ledger adapters                 spentReceipts is a Set this process builds, not a database.",
 );
 console.log(
-  "                                    capability/role/source/value, duplicate labels and",
+  "                                    Cross-host replay and the async reserve/settle protocol are",
 );
 console.log(
-  "                                    tuple admission are covered by hand-written tests",
+  "                                    covered by prove:crosshost, prove:asyncledger and",
 );
-console.log("                                    only. See docs/LIMITATIONS.md row 14.");
+console.log("                                    prove:postgres, not by any search here.");
 console.log(
-  "    ledger and multi-step runs      one decide() call per iteration, no state between",
-);
-console.log("                                    them, so nothing here can find a replay across");
-console.log("                                    actions.");
-console.log(
-  "    the lattice itself              both oracles import taintOf and joinTaint. A wrong",
+  "    multi-step runs                 one decide() call per iteration, no state carried between",
 );
 console.log(
-  "                                    PROVENANCE_TAINT or TAINT_RANK moves both sides and",
+  "                                    them, so a replay ACROSS actions is only modelled by",
 );
 console.log(
-  "                                    is invisible. What is duplicated is the WALK and the",
+  "                                    pre-seeding spentReceipts, never by a run reaching it.",
 );
-console.log("                                    CEILING RULE, not the lattice.");
-console.log("    the shape vocabulary            seven graph shapes and six malformed shapes, all");
 console.log(
-  "                                    written by the author. Not an adaptive attacker: it",
+  "    the lattice itself              every oracle here imports taintOf and joinTaint. A wrong",
 );
-console.log("                                    does not learn and does not read the engine to");
-console.log("                                    choose its next move.");
+console.log(
+  "                                    PROVENANCE_TAINT or TAINT_RANK moves both sides and is",
+);
+console.log(
+  "                                    invisible - measured: setting WEB to CLEAN leaves all three",
+);
+console.log(
+  "                                    searches at zero findings while 57 other tests fail. What is",
+);
+console.log(
+  "                                    duplicated is the WALK and the CEILING RULE, not the lattice.",
+);
+console.log(
+  "    the capability table's data     oracleCeiling restates the RULE but reads roleCeilings off",
+);
+console.log(
+  "                                    the same row the engine reads, so widening a ceiling in the",
+);
+console.log("                                    shipped table is invisible to the search.");
+console.log(
+  "    the shape vocabulary            seven graph, six malformed and fifteen receipt shapes, all",
+);
+console.log(
+  "                                    written by the author. Not an adaptive attacker: it does not",
+);
+console.log(
+  "                                    learn and does not read the engine to choose its next move.",
+);
 console.log("");
 console.log(
   "  A clean run means no property violation was found in the space explored. It does not",
@@ -134,5 +194,8 @@ console.log("  author's net.");
 rule();
 
 const failed =
-  graph.findings.length > 0 || malformed.findings.length > 0 || control.findings.length === 0;
+  graph.findings.length > 0 ||
+  malformed.findings.length > 0 ||
+  receipts.findings.length > 0 ||
+  control.findings.length === 0;
 process.exit(failed ? 1 : 0);

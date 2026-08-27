@@ -160,3 +160,10 @@ export {
 } from "./adversary.js";
 
 export { MALFORMED_SHAPES, searchMalformed } from "./malformed.js";
+
+export {
+  RECEIPT_SHAPES,
+  type ReceiptShape,
+  receiptSearchScope,
+  searchReceipts,
+} from "./receiptadversary.js";

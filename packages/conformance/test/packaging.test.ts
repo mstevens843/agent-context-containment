@@ -124,3 +124,65 @@ describe("every published package ships what its manifest promises", () => {
     ).toBe(1);
   });
 });
+
+// ---- the task graph, because a warm cache hides the only failure mode -----------------------------
+describe("the test task waits for the build it reads from", () => {
+  // WHY THIS IS A TEST AND NOT A COMMENT IN turbo.json. Turbo rejects unknown keys, so the config
+  // cannot carry its own reasoning, and the failure it prevents is invisible locally: on a warm
+  // cache no task runs at all.
+  //
+  // Every package imports ITSELF by name in at least one test - `packages/ledger/test/
+  // guarantees.test.ts` imports `@agent-context-containment/ledger` - so a test run reads the
+  // package's own `dist`. `^build` orders UPSTREAM builds only, so each package's build was
+  // scheduled concurrently with its own tests, and every `tsup.config.ts` sets `clean: true`: the
+  // build empties `dist` while the tests are importing out of it.
+  //
+  // Measured on `turbo test --force`: three consecutive runs gave 89 passed, then
+  // `Test Files 1 failed | 5 passed` with 57 tests, then `2 failed | 4 passed` with 37 - each with
+  // ZERO individual test failures, because the files died at import and their tests were never
+  // counted. A suite that reports every test passing and exits 1 is worse than a red one: the
+  // natural response is to re-run it until it is green. See DEFECTS_FOUND.md §37.
+  const turbo = JSON.parse(readFileSync(join(REPO, "turbo.json"), "utf8")) as {
+    tasks: Record<string, { dependsOn?: string[] }>;
+  };
+
+  for (const task of ["test", "typecheck"]) {
+    it(`\`${task}\` depends on its own package's build, not only on upstream builds`, () => {
+      const deps = turbo.tasks[task]?.dependsOn ?? [];
+      expect(deps, `turbo.json has no \`${task}\` task`).toBeDefined();
+      expect(
+        deps,
+        `\`${task}\` does not wait for its own build, so it races a cleaning tsup on a cold cache`,
+      ).toContain("build");
+    });
+  }
+
+  it("every package's build does clean, which is what makes the ordering load-bearing", () => {
+    // The near-miss: if no build cleaned, the ordering above would be a preference rather than a
+    // correctness requirement, and this file would be asserting a style rule.
+    const cleaning = PACKAGES.filter((p) => {
+      const cfg = join(PKG_DIR, p, "tsup.config.ts");
+      return existsSync(cfg) && /clean:\s*true/.test(readFileSync(cfg, "utf8"));
+    });
+    expect(
+      cleaning.length,
+      "no package cleans its dist - re-check why the ordering matters",
+    ).toBeGreaterThan(0);
+  });
+
+  it("at least one test really does import its own package by name", () => {
+    // The other half of the near-miss. If nothing self-imported, the race could not happen and the
+    // rule above would be guarding a hazard that does not exist.
+    const selfImporters = PACKAGES.filter((p) => {
+      const dir = join(PKG_DIR, p, "test");
+      if (!existsSync(dir)) return false;
+      return readdirSync(dir).some((f) =>
+        readFileSync(join(dir, f), "utf8").includes(`from "@agent-context-containment/${p}"`),
+      );
+    });
+    expect(
+      selfImporters.length,
+      "no test imports its own package, so the dist race is not reachable",
+    ).toBeGreaterThan(0);
+  });
+});

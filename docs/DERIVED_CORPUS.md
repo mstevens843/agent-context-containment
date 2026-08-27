@@ -1,6 +1,6 @@
 # The derived subset
 
-Six cases in `corpus/derived/`, hand-derived from published AgentDojo and InjecAgent material. Full
+Nine cases in `corpus/derived/`, hand-derived from published AgentDojo and InjecAgent material. Full
 attribution in `corpus/derived/ATTRIBUTION.md`; this document is about what the split is *for*.
 
 ## The problem it addresses

@@ -24,6 +24,17 @@ const REPO = join(import.meta.dirname, "..", "..", "..");
 // thing recurses. `describe.skipIf` rather than a silent early return, so a skipped run says so.
 const REENTRANT = process.env.CONTAINMENT_VERIFY_NUMBERS === "1";
 
+/**
+ * The shipped ceiling, read from the LINE rather than from the resolved value.
+ *
+ * `MAX_UNREGISTERED` takes an environment override so that the ratchet's own tests do not have to
+ * rewrite `scripts/verify-numbers.mjs` in place - see the block at the bottom of this file, and
+ * DEFECTS_FOUND.md section 37. Matching the literal is what keeps that hook from being a bypass:
+ * an override can change what a test run sees, never what ships.
+ */
+const CEILING_LINE =
+  /const MAX_UNREGISTERED = Number\(process\.env\.CONTAINMENT_MAX_UNREGISTERED \?\? (\d+)\);/;
+
 describe("what the scanner counts as a numeric claim", () => {
   it("counts a bare count and an N-of-M pair", () => {
     expect(numericClaims("**503 tests across five packages.**").length).toBeGreaterThan(0);
@@ -190,12 +201,21 @@ describe("verify:numbers can fail, proven without touching a release document", 
       expect(failed, `exempted shapes broke the check:\n${out}`).toBe(false);
       // Read the ceiling from the script rather than repeating it here. A hand-typed number in the
       // test that guards hand-typed numbers is the joke this repository has already told twice.
-      const declared = /const MAX_UNREGISTERED = (\d+);/.exec(
-        readFileSync(join(REPO, "scripts/verify-numbers.mjs"), "utf8"),
-      )?.[1];
-      expect(out, "a document of purely exempted shapes moved the unregistered count").toContain(
-        `${declared} UNREGISTERED`,
+      // AT OR BELOW THE CEILING, NOT EQUAL TO IT.
+      //
+      // This asserted the printed count EQUALLED the declared ceiling, which made the stated
+      // maintenance action - lowering the ceiling once the count drops - turn the suite red, and
+      // made removing an unregistered sentence red too. A ratchet you are punished for tightening
+      // is a ratchet nobody tightens. See DEFECTS_FOUND.md section 36.
+      const declared = Number(
+        CEILING_LINE.exec(readFileSync(join(REPO, "scripts/verify-numbers.mjs"), "utf8"))?.[1] ??
+          Number.MAX_SAFE_INTEGER,
       );
+      const live = Number(/(\d+) UNREGISTERED/.exec(out)?.[1] ?? Number.MAX_SAFE_INTEGER);
+      expect(
+        live,
+        "a document of purely exempted shapes pushed the unregistered count past the ceiling",
+      ).toBeLessThanOrEqual(declared);
     } finally {
       rmSync(doc, { force: true });
     }
@@ -203,7 +223,9 @@ describe("verify:numbers can fail, proven without touching a release document", 
 
   it("the ratchet ceiling exists and is not set past the point of meaning", () => {
     const src = readFileSync(join(REPO, "scripts/verify-numbers.mjs"), "utf8");
-    const declared = /const MAX_UNREGISTERED = (\d+);/.exec(src);
+    // Matching the LINE, not the resolved value: `CONTAINMENT_MAX_UNREGISTERED` exists so the tests
+    // below need not rewrite the script, and this is what stops that hook lifting the shipped bound.
+    const declared = CEILING_LINE.exec(src);
     expect(
       declared,
       "the ratchet ceiling is gone - unregistered numbers can grow unchecked",
@@ -272,5 +294,106 @@ describe("verify:numbers can fail, proven without touching a release document", 
     expect(out).toMatch(/direct-harm imported\s+30\s/);
     expect(out).toMatch(/data-stealing imported\s+32\s/);
     expect(out).toMatch(/imported cases\s+62\s/);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------
+// THE RATCHET, AND THE FACT-COVERAGE CHECK, EACH FROM BOTH SIDES.
+//
+// Added after a refutation pass measured two things: the ratchet was pinned to EQUALITY, so doing
+// the maintenance it asks for turned the suite red; and two registered facts passed their negative
+// controls while matching zero sentences in any shipping document. See DEFECTS_FOUND.md section 36.
+// ---------------------------------------------------------------------------------------------
+
+describe("the ratchet can be tightened, and cannot be loosened quietly", () => {
+  const SCRIPT = join(REPO, "scripts/verify-numbers.mjs");
+
+  /**
+   * Runs the script at a chosen ceiling WITHOUT editing it.
+   *
+   * The first version rewrote `scripts/verify-numbers.mjs` in place and restored it in a `finally`.
+   * That leaves the repository corrupted if the run is killed, and it was observed leaving
+   * `MAX_UNREGISTERED = 9999` behind after an interrupted suite - a shipped script one Ctrl-C away
+   * from lying about its own ceiling. The script now reads an override from the environment for
+   * exactly this, the way `CONTAINMENT_EXTRA_DOC` exists so no test writes into a release document.
+   * See DEFECTS_FOUND.md section 37.
+   */
+  const atCeiling = (n: number): { readonly failed: boolean; readonly out: string } => {
+    try {
+      const out = execFileSync("node", ["scripts/verify-numbers.mjs", "--fast"], {
+        cwd: REPO,
+        encoding: "utf8",
+        env: { ...process.env, CONTAINMENT_MAX_UNREGISTERED: String(n) },
+      });
+      return { failed: false, out };
+    } catch (e) {
+      return { failed: true, out: String((e as { stdout?: string }).stdout ?? "") };
+    }
+  };
+
+  /** The shipped ceiling, read from the LINE rather than the resolved value. */
+  const declared = (): number =>
+    Number(CEILING_LINE.exec(readFileSync(SCRIPT, "utf8"))?.[1] ?? Number.MAX_SAFE_INTEGER);
+
+  const liveCount = (): number =>
+    Number(/(\d+) UNREGISTERED/.exec(atCeiling(9_999).out)?.[1] ?? Number.NaN);
+
+  it("the live count is at or below the shipped ceiling", () => {
+    expect(liveCount()).toBeLessThanOrEqual(declared());
+  });
+
+  it("lowering the ceiling TO the current count passes", () => {
+    // The maintenance action the script asks for. It used to turn the suite red.
+    expect(atCeiling(liveCount()).failed, "tightening to the live count was rejected").toBe(false);
+  });
+
+  it("lowering the ceiling BELOW the current count fails, and says why", () => {
+    const { failed, out } = atCeiling(liveCount() - 1);
+    expect(failed, "a ceiling under the live count was accepted").toBe(true);
+    expect(out).toContain("RATCHET BROKEN");
+  });
+
+  it("the override cannot raise what ships", () => {
+    // The hook exists for these tests. If it could move the shipped bound it would be a bypass.
+    expect(readFileSync(SCRIPT, "utf8")).toContain("CONTAINMENT_MAX_UNREGISTERED ?? 100");
+  });
+});
+
+describe("a registered fact that guards no sentence is caught", () => {
+  it("fails, and names the fact, when a fact matches nothing in any shipping document", () => {
+    // The section 16 shape at the level of one fact: a pattern that CAN fire, proven by its own
+    // negative control, but which fires on nothing that ships. The phantom fact is injected through
+    // the environment rather than by rewriting the script, for the reason above.
+    let failed = false;
+    let out = "";
+    try {
+      out = execFileSync("node", ["scripts/verify-numbers.mjs", "--fast"], {
+        cwd: REPO,
+        encoding: "utf8",
+        env: { ...process.env, CONTAINMENT_PHANTOM_FACT: "1" },
+      });
+    } catch (e) {
+      failed = true;
+      out = String((e as { stdout?: string }).stdout ?? "");
+    }
+    expect(failed, "a fact guarding nothing was accepted").toBe(true);
+    expect(out).toContain("MATCH NO SENTENCE");
+    expect(out).toContain("a fact nobody states");
+  });
+
+  it("and without the hook, every shipped fact guards something", () => {
+    // The near-miss: a check that always failed would pass the test above.
+    const { failed } = (() => {
+      try {
+        execFileSync("node", ["scripts/verify-numbers.mjs", "--fast"], {
+          cwd: REPO,
+          encoding: "utf8",
+        });
+        return { failed: false };
+      } catch {
+        return { failed: true };
+      }
+    })();
+    expect(failed, "a shipped fact guards no sentence").toBe(false);
   });
 });

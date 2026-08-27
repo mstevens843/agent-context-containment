@@ -48,11 +48,11 @@ Found by adding an import and watching nothing fail.
 
 **What v1.0 built:**
 
-- **`pnpm audit:mutations`** — thirteen critical branches, each deleted, rebuilt and re-tested, with the
-  tests required to **fail**. 8 of 8 caught. Two properties learned the hard way: it refuses to run
+- **`pnpm audit:mutations`** — fifteen critical branches, each deleted, rebuilt and re-tested, with the
+  tests required to **fail**. **15/15 caught**. Two properties learned the hard way: it refuses to run
   unless the baseline is green (a differential measurement needs a starting point), and every `find`
   must match exactly once (three entries matched zero times and would have reported as caught).
-- **`docs/claims.json`** — 26 headline claims, each with its grade, the test that would fail if it
+- **`docs/claims.json`** — 27 headline claims, each with its grade, the test that would fail if it
   were false, its negative control, and the command that produces any number in it. Enforced: a
   PROVEN claim with no negative control fails the build, because that is the §15 shape exactly.
 - **Generated blocks** — a `GENERATED:<generator>` marker pair in README and STATUS, filled and verified from the
@@ -267,7 +267,7 @@ engine. The benign column is the only thing that tells them apart.
 
 | | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 | v1.0.1 |
 |---|---|---|---|---|---|---|
-| tests | 263 | 304 | 361 | 414 | 534 | **605** |
+| tests | 263 | 304 | 361 | 414 | 534 | **633** |
 | hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **130** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 | 7 |
 | non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | 34 |
@@ -281,7 +281,7 @@ engine. The benign column is the only thing that tells them apart.
 | **real-database proof scenarios** | 0 | 0 | 0 | 0 | 11, live Postgres | **11, live Postgres** |
 | review workflows | 0 | 0 | 0 | 4 | 4 | 4 |
 | **reviewer decides for itself** | no | no | no | no | yes | **yes** |
-| defects recorded | 7 | 8 | 8 | 14 | 22 | **33** |
+| defects recorded | 7 | 8 | 8 | 14 | 22 | **37** |
 | decisions produced by corpus | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
 
 **v0.8 is the first pass since v0.4 to add corpus cases, and it added no engine capability.** The 28
@@ -334,23 +334,23 @@ Counted, not remembered — these were stale for four versions before v0.6.
 <!-- GENERATED:repo-stats -->
 | | |
 |---|---|
-| Source LOC | **12,244** across 5 packages |
-| Test LOC | **11,012** across 46 files |
+| Source LOC | **12,888** across 5 packages |
+| Test LOC | **11,515** across 47 files |
 | Example LOC | **1,843** across 15 files |
-| Script LOC | **3,384** — 20 report/proof/import scripts, 6 shell |
-| Total TypeScript | **25,099** |
-| Docs (docs/) | **5,449 lines** across 24 files |
+| Script LOC | **3,569** — 20 report/proof/import scripts, 6 shell |
+| Total TypeScript | **26,246** |
+| Docs (docs/) | **5,865 lines** across 24 files |
 <!-- /GENERATED -->
 
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
+| `conformance` | 266 |
 | `core` | 265 |
-| `conformance` | 238 |
 | `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **605** |
+| **total** | **633** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -414,7 +414,7 @@ this entry read before v1.0.
 | **the ingestion helpers infer nothing** | **PROVEN** | a hostile page declared `SYSTEM` is ALLOWED outright — `ingest.test.ts` asserts it, so the trust boundary is never a surprise |
 | `contextOf` refuses a dangling edge | **PROVEN** | an unresolvable edge would read as CLEAN — a laundering path that looks like a typo |
 | that a declaration is honest | **DELEGATED TO CALLER** | the helpers make it harder to mistype, never harder to lie |
-| **that these tests could actually fail** | **PROVEN, for 13 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
+| **that these tests could actually fail** | **PROVEN, for 15 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
 | that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 20 a reader would quote, not every sentence |
 | that the audit machinery has no blind spots | **NOT CLAIMED** | it was written by the person whose claims it checks, and shares his blind spots exactly. The independent reader is the only control that does not |
 | `staleAfterMs` has no free value | **KNOWN RISK** | too long strands a receipt, too short double-spends |
@@ -429,7 +429,7 @@ pnpm verify:corpus                 # 7/7 against the frozen manifest
 pnpm import:check                  # 62/62 rebuild byte-identically
 pnpm verify:manifests              # 0 contradictions across 5 tables
 pnpm verify:freeze                 # exits 1, by design
-pnpm lint && pnpm typecheck && pnpm build && pnpm test     # 605 tests
+pnpm lint && pnpm typecheck && pnpm build && pnpm test     # 627 tests
 pnpm prove:crosshost               # sync adapter logic
 pnpm prove:asyncledger             # async protocol, in-process
 DATABASE_URL=postgres://localhost/containment_ledger_test pnpm prove:postgres   # 11/11, live DB
@@ -470,10 +470,10 @@ alone has never counted in this repository.
 | `A11` | Postgres `stats` stale cutoff — `stranded` permanently 0 | no, observability only | **closed §21**, mutation-checked |
 | `P20` | mixed-provenance over-reporting on spliced payloads | no, diagnostic only | **closed §21**, mutation-checked |
 | `L13` | a receipt-free action makes a spurious ledger round-trip | no, cost only | **closed §21**, mutation-checked |
-| `P05` | one-receipt-one-slot guard | n/a | **UNREACHABLE, kept as defence in depth.** An exhaustive sweep of argument and receipt shapes reaches it zero times. Not ordinary coverage: two tests pin the invariant that kills it, and disabling slot uniqueness makes it fire — the counts are in §20 |
+| `P05` | one-receipt-one-slot guard | n/a | **REACHABLE, and guarded since v1.0.1.** A two-argument action carrying one receipt id reaches it directly; deleting it produces **1,232 findings** in the receipt search at 12,000 iterations on seed `0x0dec0001`, and `receipt-one-slot` is a mutation entry. The "exhaustive sweep reaches it zero times" sentence that stood here was a fact about the sweep, which passed one receipt object per call and so could not collide with itself — see §34 and §37 |
 | `P21` | `mixed && effect === "irreversible"` | n/a | **RECORDED-DEAD / inert.** Documented, not covered. Its stated safety net is `M05`, which is closed |
 
-**Unguarded branches remaining: 0.** Unreachable branches: 2, both dispositioned above.
+**Unguarded branches remaining: 0.** Unreachable branches: **1** (`P21`), dispositioned above. `P05` was the second and is reachable — §34 corrected the disposition, and this line still said 2 until §37.
 
 ## Publish state
 
@@ -500,13 +500,13 @@ alone has never counted in this repository.
 | exact imports, 34 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
 | lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 605** (534 before this pass) |
+| test | **PASS — 633** (534 before this pass) |
 | `decide()` is total: no input throws, every malformed one is denied | **PASS**, explicit shapes plus a seeded sweep |
 | a provenance DAG resolves by path, and a cycle still fails closed | **PASS**, diamond and cycle pinned separately |
 | an unrecognised parameter role admits clean input only | **PASS**, and it could ALLOW before |
 | source comments checked for absolute claims | **PASS**, and an injected false claim is caught |
 | `examples/` typechecked | **PASS** — nothing typechecked that directory until this pass |
-| claim gates in CI: `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations`, `adversary` | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
+| CI claim gates: 8 — `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations`, `adversary`, `audit:release`, plus the frozen-holdout job | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
 | adversarial mutation sweep, 105 guards | **73 protected · 30 unguarded · 2 unreachable** when first swept. **All 30 are now closed**, each written against its mutation and each watched to fail under it — 9 in §19, 18 in §20, 3 in §21. The 2 unreachable are dispositioned, not covered: see the branch-risk table below |
 | per-package `tsconfig.test.json` | **PASS** ×5 |
 | examples ×15, playground matrix | **PASS** |
@@ -531,10 +531,10 @@ alone has never counted in this repository.
 | reviewer and engine demonstrably disagree, both directions | **PASS** |
 | semantic advisories: 0 false positives on 10 honest bindings | **PASS** |
 | prose guard: no document overstates | **PASS**, and an injected false claim is caught |
-| mutation audit, 13 critical branches | **13/13 caught** — deleting any fix fails a test |
+| mutation audit, 15 critical branches | **15/15 caught** — deleting any fix fails a test |
 | mutation audit refuses a non-green baseline | **PASS** — a differential measurement needs a starting point |
 | mutation audit refuses a zero-match entry | **PASS** — caught 3 of its own entries on the first run |
-| generated blocks match their generators | **PASS**, and it caught its first real drift within minutes |
+| generated blocks — 7 generated blocks match their generators | **PASS**, and it caught its first real drift within minutes |
 | every PROVEN claim names a test AND a negative control | **PASS** — `claims.test.ts` fails otherwise |
 | classifier claims asserted against `classify()`, never a proxy | **PASS** |
 | the prose guard catches an injected false claim | **PASS**, demonstrated on every `pnpm audit:docs` run |

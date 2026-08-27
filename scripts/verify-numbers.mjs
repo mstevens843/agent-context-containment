@@ -49,6 +49,28 @@ const run = (cmd) =>
     env: { ...process.env, CONTAINMENT_VERIFY_NUMBERS: "1" },
   });
 
+/**
+ * Like `run`, but REPORTS whether the command succeeded instead of throwing or swallowing it.
+ *
+ * Needed for the test count, which used `... || true` and therefore could not tell a green suite
+ * from a red one. See the comment above `testRun`.
+ */
+const runStatus = (cmd) => {
+  try {
+    return {
+      ok: true,
+      out: execSync(cmd, {
+        cwd: ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+        env: { ...process.env, CONTAINMENT_VERIFY_NUMBERS: "1" },
+      }),
+    };
+  } catch (e) {
+    return { ok: false, out: `${e.stdout ?? ""}${e.stderr ?? ""}` };
+  }
+};
+
 // ---- the facts, computed rather than remembered ------------------------------------------------
 const cases = SPLITS.map((s) => loadSplit(`${ROOT}corpus/${s}`, s));
 const total = cases.reduce((n, c) => n + c.length, 0);
@@ -64,11 +86,41 @@ const importedCount = (cases[SPLITS.indexOf("imported")] ?? []).length;
 // The alternative was a re-entrancy guard alone, which left two nested full-suite runs per test file
 // and timed out. See DEFECTS_FOUND.md §21.
 const FAST = process.argv.includes("--fast");
-const testOutput = FAST ? "" : run("pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed' || true");
-const testTotal = [...testOutput.matchAll(/Tests\s+(\d+) passed/g)].reduce(
-  (n, m) => n + Number(m[1]),
-  0,
-);
+
+// THE TEST COUNT REFUSES TO GUESS, AND THE FIRST VERSION GUESSED SILENTLY IN THE WORST DIRECTION.
+//
+// It ran `pnpm -s test | grep -E 'Tests +[0-9]+ passed' || true` and summed the matches. Vitest
+// prints `Tests  1 failed | 254 passed` when anything fails, which that pattern does NOT match, and
+// `|| true` swallowed the non-zero exit. So a package with one failing test contributed ZERO, the
+// total silently dropped by a whole package, and the script reported the DOCUMENTS as stale:
+//
+//   STALE  README.md   tests: the document says 622, `pnpm test` produces 367
+//
+// against a README that was right, because the suite was red. A checker that blames the prose when
+// the code is broken is worse than no checker: it sends you to fix the wrong file, and it does it
+// with a precise-looking number. This happened repeatedly during the v1.0.1 passes and was each time
+// mistaken for a circular-dependency artefact. See DEFECTS_FOUND.md section 35.
+//
+// The rule the rest of this script already follows: a fact that cannot be computed LEAVES the list.
+// It is never registered with a placeholder, and never registered with a number nobody stands behind.
+const testRun = FAST ? { ok: true, out: "" } : runStatus("pnpm -s test 2>&1");
+const testFailed =
+  !FAST &&
+  (!testRun.ok || /Tests\s+\d+\s+failed/.test(testRun.out) || /\bfailed\s*\|/.test(testRun.out));
+const testTotal = testFailed
+  ? -1
+  : [...testRun.out.matchAll(/Tests\s+(\d+) passed/g)].reduce((n, m) => n + Number(m[1]), 0);
+if (testFailed) {
+  console.log("");
+  console.log("  THE TEST SUITE IS NOT GREEN, so the `tests` fact is NOT REGISTERED for this run.");
+  console.log(
+    "  It is not stale documentation - it is a red suite, and counting passes from a red",
+  );
+  console.log(
+    "  run under-reports by a whole package per failing file. Fix the suite, then re-run.",
+  );
+  console.log("");
+}
 
 // v1.0-rc: five more facts registered, chosen from the unregistered survey by which numbers a reader
 // would act on. Each is COMPUTED here, never remembered, which is the only property that makes a
@@ -358,7 +410,7 @@ const ALL_FACTS = [
 
 // In `--fast` mode the tests fact was never computed, so it must not be checked - a fact registered
 // with a value of 0 would flag every correct statement as stale, which is the -1 mistake one level on.
-const FACTS = ALL_FACTS.filter((f) => !(FAST && f.id === "tests"));
+const FACTS = ALL_FACTS.filter((f) => !((FAST || testFailed) && f.id === "tests"));
 
 // ---- scan every document -----------------------------------------------------------------------
 const SKIP = new Set(["node_modules", ".git", "dist", ".turbo"]);
@@ -466,6 +518,32 @@ for (const file of [...docs, ...(EXTRA_DOC ? [EXTRA_DOC] : [])]) {
   }
 }
 
+// A REGISTERED FACT THAT MATCHES NO LIVE SENTENCE PROTECTS NOTHING.
+//
+// Two facts sat in this list passing their negative controls - a deliberately wrong number in a
+// throwaway document IS caught, because the PATTERN works - while matching zero sentences in any
+// real document. The control proved the pattern could fire; nothing proved it fires on anything
+// that ships. That is the section 16 shape at the level of a single fact.
+//
+// A fact may opt out with `computedOnly: true`, which says "computed for the report, not to guard
+// prose". Everything else must be guarding a sentence somebody could get wrong.
+const factCoverage = ALL_FACTS.map((f) => {
+  let hits = 0;
+  for (const file of docs) {
+    const rel = file.startsWith(ROOT) ? file.slice(ROOT.length - 1) : file;
+    if (!RELEASE_FACING.some((r) => rel.endsWith(r))) continue;
+    const text = readFileSync(file, "utf8");
+    for (const pt of f.patterns) hits += [...text.matchAll(new RegExp(pt.source, pt.flags))].length;
+  }
+  return { id: f.id, hits, computedOnly: f.computedOnly === true };
+});
+// A phantom fact, for the control that proves the check above can fire. Same reasoning as the
+// ceiling override: the alternative was a test that edits this file and restores it.
+if (process.env.CONTAINMENT_PHANTOM_FACT === "1") {
+  factCoverage.push({ id: "a fact nobody states", hits: 0, computedOnly: false });
+}
+const unguardingFacts = factCoverage.filter((f) => f.hits === 0 && !f.computedOnly);
+
 const rule = "=".repeat(96);
 console.log(rule);
 console.log("hand-typed numbers, checked against what the code produces");
@@ -495,7 +573,18 @@ if (unregistered.length > 12) console.log(`    ... and ${unregistered.length - 1
 // Lowering this number is the maintenance task. Raising it requires deciding, in a diff somebody
 // reviews, that a new hand-typed claim is worth it - which is the conversation that was never had
 // for any of the 112.
-const MAX_UNREGISTERED = 100;
+// THE CEILING, AND A TEST HOOK THAT EXISTS SO THE TESTS DO NOT REWRITE THIS FILE.
+//
+// The ratchet's own tests need to run this script at other ceilings. The first version did that
+// by editing this line in place and restoring it in a `finally` - which leaves the repository
+// corrupted if the run is killed, and was observed leaving `MAX_UNREGISTERED = 9999` behind after
+// an interrupted suite. A shipped script that its own tests rewrite is a shipped script one
+// Ctrl-C away from lying. Same reasoning as `CONTAINMENT_EXTRA_DOC`, which exists so a test never
+// writes into a real release document. See DEFECTS_FOUND.md section 37.
+//
+// CI does not set this. The literal below is what ships, and the meta-test in numbers.test.ts
+// reads THIS LINE rather than the resolved value, so the override cannot raise the shipped bound.
+const MAX_UNREGISTERED = Number(process.env.CONTAINMENT_MAX_UNREGISTERED ?? 100);
 let ratchetFailed = false;
 if (unregistered.length > MAX_UNREGISTERED) {
   ratchetFailed = true;
@@ -516,7 +605,19 @@ if (unregistered.length > MAX_UNREGISTERED) {
   console.log("  scripts/verify-numbers.mjs to lock the improvement in.");
 }
 
-if (problems.length === 0 && !ratchetFailed) {
+if (unguardingFacts.length > 0) {
+  console.log("");
+  console.log(
+    `  ${unguardingFacts.length} REGISTERED FACT(S) MATCH NO SENTENCE IN ANY RELEASE-FACING DOCUMENT:`,
+  );
+  for (const f of unguardingFacts) console.log(`    ${f.id}`);
+  console.log("");
+  console.log("  Each of those passes its negative control and guards nothing that ships. Either");
+  console.log("  write the sentence it should be checking, or mark the fact `computedOnly: true`");
+  console.log("  to say plainly that it is for the report rather than for the prose.");
+}
+
+if (problems.length === 0 && !ratchetFailed && unguardingFacts.length === 0) {
   console.log("  All of them agree with the code.");
   console.log("");
   console.log(
