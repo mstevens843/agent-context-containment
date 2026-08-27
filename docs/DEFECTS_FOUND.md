@@ -2717,3 +2717,63 @@ result and this is an anecdote generator.
 
 **Deployment topology is untouched**, as it must be. The deployer-runnable check added in section 41
 is still the only answer to it.
+
+## 43. The number checker blamed three documents for a turbo cache hit
+
+CI failed on `pnpm verify:numbers` with three stale-number findings:
+
+```
+  tests                             0   (pnpm test)
+  ...
+  STALE  README.md:462
+         tests: the document says 711, `pnpm test` produces 0
+```
+
+**Every one of those documents was correct.** The suite was green, 711 tests passed, and the number
+in the documents was right. What produced `0` was the checker.
+
+### The mechanism
+
+Counting tests means running the suite and reading the per-package `Tests N passed` summaries out of
+its output. In the `claim-gates` job, `pnpm blocks:check` runs the suite two steps before
+`verify:numbers` does — so by the time the counting run happens, **turbo has a full cache hit**.
+Locally turbo replays the cached task logs and the summaries are there. In CI it replayed nothing:
+a `FULL TURBO` banner and no task output.
+
+`matchAll` then found no summaries, `reduce` summed them to **0**, and — because the suite had
+exited 0 — nothing looked wrong. The green-suite path had no idea it had counted nothing.
+
+Reproduced locally by suppressing the replay: `pnpm -s test --output-logs=none` yields zero summary
+matches on a warm cache, and the script reports every correct test count in the repository as stale.
+
+### It is section 35, in a new costume, in the same three lines
+
+Section 35 recorded that this line's previous version summed `Tests N passed` matches and
+under-reported whenever the suite was RED, because vitest prints `Tests 1 failed | 254 passed` and
+the pattern did not match it. That was fixed by refusing to register the fact on a red suite.
+
+The fix covered the red case and not this one: **a GREEN suite that prints no summary at all.** The
+comment written above that fix says a checker that blames the documents when the code is fine "sends
+you to fix the wrong file, and it does it with a precise-looking number". It then did exactly that,
+and the reflex it produced was the intended one — three separate readings of this failure concluded
+the documents were stale and recommended editing them.
+
+### Two fixes, and the second matters more
+
+**`TURBO_FORCE=true` on the counting run.** Forcing execution means the summaries are always present,
+whatever the cache state. Applied in `verify-numbers.mjs`, and in `generated-blocks.mjs` for the same
+reason: that file already *throws* when it cannot parse, so its failure was loud rather than wrong —
+but it only stayed loud because `blocks:check` happens to run before anything warms the cache. An
+invisible ordering dependency is not a defence.
+
+**A green suite that printed no summary now REFUSES.** Registering the sum of nothing is registering
+`0`, and `0` is a placeholder nobody stands behind — the exact thing this script's own rule forbids:
+*a fact that cannot be computed leaves the list.* It exits 2 and says the harness is at fault and no
+document is, so this class of failure can never again be read as stale documentation.
+
+### The lesson, which is not a new one
+
+The previous pass added a refusal for the failure mode it had just been burned by, and did not ask
+what *else* could make the count unreadable. **A guard written against one cause of a wrong number is
+not a guard against wrong numbers.** The check that finally holds is the one on the OUTPUT — "did I
+parse anything at all?" — rather than on any particular way of failing to.

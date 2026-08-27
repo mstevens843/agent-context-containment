@@ -204,7 +204,13 @@ const runPackageTestsForCountBlock = () => {
 
 export const runTurboTestsForCountBlock = () => {
   try {
-    return execSync("pnpm -s test", {
+    // `TURBO_FORCE=true` for the same reason `scripts/verify-numbers.mjs` uses it: counting tests
+    // means reading the per-package `Tests N passed` summaries, and a warm turbo cache may replay no
+    // task logs at all - it did not in CI. This file already THROWS when it cannot parse, so the
+    // failure was loud rather than wrong, but it only stayed loud because `blocks:check` happens to
+    // run before anything else warms the cache. That is an ordering dependency nobody can see.
+    // See DEFECTS_FOUND.md section 43.
+    return execSync("TURBO_FORCE=true pnpm -s test", {
       cwd: ROOT,
       encoding: "utf8",
       shell: "/bin/bash",

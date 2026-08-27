@@ -526,6 +526,70 @@ describe("verify:numbers can fail, proven without touching a release document", 
 // controls while matching zero sentences in any shipping document. See DEFECTS_FOUND.md section 36.
 // ---------------------------------------------------------------------------------------------
 
+describe("the test count survives a warm turbo cache", () => {
+  // WHAT THIS IS ABOUT. CI failed with `tests 0 (pnpm test)` and three release documents reported
+  // stale for saying 711. Every document was right: `blocks:check` runs the suite two steps earlier,
+  // so the counting run was a full turbo cache hit that replayed no task logs, `matchAll` found no
+  // `Tests N passed` summaries, and the sum of nothing is 0. See DEFECTS_FOUND.md section 43.
+  const SCRIPT = readFileSync(join(REPO, "scripts/verify-numbers.mjs"), "utf8");
+
+  it("forces execution, so a cache hit cannot leave nothing to count", () => {
+    expect(
+      SCRIPT,
+      "the counting run no longer forces execution - a warm turbo cache can make it count zero tests",
+    ).toContain("TURBO_FORCE=true pnpm -s test");
+  });
+
+  it("and generated-blocks does too, so the order of CI steps stops mattering", () => {
+    // That file already throws when it cannot parse, so its failure was loud rather than wrong - but
+    // only because `blocks:check` happens to run before anything warms the cache. An invisible
+    // ordering dependency is not a defence.
+    expect(readFileSync(join(REPO, "scripts/generated-blocks.mjs"), "utf8")).toContain(
+      "TURBO_FORCE=true pnpm -s test",
+    );
+  });
+
+  it("refuses outright when the suite is green but printed no summary", () => {
+    // THE CHECK THAT ACTUALLY HOLDS, and the reason it is on the OUTPUT rather than on any particular
+    // way of failing. Section 35 added a refusal for a RED suite; this is a GREEN one that printed
+    // nothing, which that refusal did not cover. Registering the sum of no summaries registers 0 -
+    // the placeholder this script's own rule forbids.
+    expect(SCRIPT).toContain("testUncountable");
+    expect(SCRIPT).toContain("PRINTED NO `Tests N passed` SUMMARY");
+  });
+
+  it("the refusal exits non-zero, rather than reporting every correct count as stale", () => {
+    // Driven for real: point the counting run at a command that succeeds and prints no summary, and
+    // require a refusal rather than a pile of stale-number findings. This is the CI shape exactly.
+    // Driven through the env hook rather than by copying the script: a copy in a temp directory
+    // cannot resolve its own relative imports, and rewriting the shipped file in place is what
+    // section 37 forbade. `true` succeeds and prints nothing - a green run with no summary.
+    let failed = false;
+    let out = "";
+    try {
+      out = execFileSync("node", ["scripts/verify-numbers.mjs"], {
+        cwd: REPO,
+        encoding: "utf8",
+        env: { ...process.env, CONTAINMENT_TEST_CMD: "true" },
+      });
+    } catch (e) {
+      failed = true;
+      out = `${String((e as { stdout?: string }).stdout ?? "")}${String((e as { stderr?: string }).stderr ?? "")}`;
+    }
+    expect(failed, "a suite that printed no summary was accepted").toBe(true);
+    expect(out).toContain("PRINTED NO");
+    expect(out, "it reported documents as stale instead of naming the harness").not.toContain(
+      "stale number(s)",
+    );
+  });
+
+  it("and the hook cannot change what ships", () => {
+    // The near-miss. If the default were not the forcing command, the test above would be watching a
+    // refusal that the shipped script can never reach.
+    expect(SCRIPT).toContain('?? "TURBO_FORCE=true pnpm -s test 2>&1"');
+  });
+});
+
 describe("the ratchet can be tightened, and cannot be loosened quietly", () => {
   const SCRIPT = join(REPO, "scripts/verify-numbers.mjs");
 

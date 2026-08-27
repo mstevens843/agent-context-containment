@@ -103,13 +103,56 @@ const FAST = process.argv.includes("--fast");
 //
 // The rule the rest of this script already follows: a fact that cannot be computed LEAVES the list.
 // It is never registered with a placeholder, and never registered with a number nobody stands behind.
-const testRun = FAST ? { ok: true, out: "" } : runStatus("pnpm -s test 2>&1");
+//
+// `TURBO_FORCE=true`, AND THAT IS NOT A PERFORMANCE DETAIL. Counting tests means reading the per-
+// package `Tests N passed` summaries out of the suite's own output, and on a warm turbo cache there
+// may be no such output to read: turbo replays cached task logs locally but did not in CI, where the
+// `claim-gates` job runs `pnpm blocks:check` - which itself runs the suite - two steps earlier. So
+// the counting run was a full cache hit that printed a `FULL TURBO` banner and nothing else.
+//
+// The result was NOT an error. `matchAll` found no summaries, summed to `0`, the suite had exited 0
+// so nothing looked wrong, and the script reported three release documents as stale for saying 711
+// when "the code produces 0". It sent a reader to fix the wrong file, with a precise-looking number,
+// which is the exact sentence section 35 wrote about the previous version of this line.
+//
+// Forcing execution makes the summaries always present. See DEFECTS_FOUND.md section 43.
+// A TEST HOOK, for the same reason `CONTAINMENT_MAX_UNREGISTERED` and `CONTAINMENT_PHANTOM_FACT`
+// exist: the refusal below has to be watched firing, and the alternative was a test that copies or
+// rewrites this shipped script. CI does not set it, and the command it defaults to is what ships.
+const TEST_CMD = process.env.CONTAINMENT_TEST_CMD ?? "TURBO_FORCE=true pnpm -s test 2>&1";
+const testRun = FAST ? { ok: true, out: "" } : runStatus(TEST_CMD);
 const testFailed =
   !FAST &&
   (!testRun.ok || /Tests\s+\d+\s+failed/.test(testRun.out) || /\bfailed\s*\|/.test(testRun.out));
-const testTotal = testFailed
-  ? -1
-  : [...testRun.out.matchAll(/Tests\s+(\d+) passed/g)].reduce((n, m) => n + Number(m[1]), 0);
+const testSummaries = FAST ? [] : [...testRun.out.matchAll(/Tests\s+(\d+) passed/g)];
+// A GREEN SUITE THAT PRINTED NO SUMMARY IS A FACT THIS SCRIPT CANNOT COMPUTE.
+//
+// Registering the sum of nothing is registering 0, and 0 is a number nobody stands behind - the
+// placeholder this file's own rule forbids. Refusing here is what stops a harness problem being
+// reported as stale documentation ever again.
+const testUncountable = !FAST && !testFailed && testSummaries.length === 0;
+const testTotal =
+  testFailed || testUncountable ? -1 : testSummaries.reduce((n, m) => n + Number(m[1]), 0);
+if (testUncountable) {
+  console.error("");
+  console.error("  THE TEST SUITE PASSED BUT PRINTED NO `Tests N passed` SUMMARY.");
+  console.error("");
+  console.error(
+    "  This is NOT stale documentation and no document is at fault. The suite exited 0",
+  );
+  console.error("  and produced nothing to count - most likely a turbo cache hit that replayed no");
+  console.error(
+    "  task logs. Registering the sum of no summaries would register 0 and report every",
+  );
+  console.error(
+    "  correct test count in the repository as stale. See DEFECTS_FOUND.md section 43.",
+  );
+  console.error("");
+  console.error("  Fix the harness, not the documents: check that `TURBO_FORCE=true pnpm -s test`");
+  console.error("  prints a per-package summary in this environment.");
+  console.error("");
+  process.exit(2);
+}
 if (testFailed) {
   console.log("");
   console.log("  THE TEST SUITE IS NOT GREEN, so the `tests` fact is NOT REGISTERED for this run.");
