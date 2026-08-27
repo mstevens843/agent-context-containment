@@ -260,3 +260,91 @@ describe("provenance inheritance in decide()", () => {
     expect(v.decision).toBe("ALLOW");
   });
 });
+
+describe("coercion is a tripwire, and still not a membrane", () => {
+  // THE DISTINCTION THIS BLOCK EXISTS TO KEEP HONEST. `docs/LIMITATIONS.md` says there is no membrane
+  // in JavaScript, and that remains true in the sense that matters: `+` returns a primitive, a
+  // primitive cannot carry a label, and so nothing can propagate taint into the RESULT of a
+  // coercion. What is possible - and was not being done - is noticing the coercion as it happens.
+  //
+  // Before this, `${tainted}` produced the string "[object Object]", silently. That never leaked the
+  // value, so it was never a security defect; it was the wrong FAILURE. Interpolating an untrusted
+  // value into a prompt or a URL returned a plausible-looking string and no signal.
+
+  const t = tainted("secret@attacker.tld", "WEB");
+
+  it("refuses a template literal", () => {
+    expect(() => `${t}`).toThrow(/coerced to a primitive/);
+  });
+
+  it("refuses String() and string concatenation", () => {
+    expect(() => String(t)).toThrow(/coerced to a primitive/);
+    expect(() => `${t as unknown as string}`).toThrow(/coerced to a primitive/);
+  });
+
+  it("names the sanctioned way out rather than just refusing", () => {
+    // A refusal that does not say what to do instead gets worked around with `as any`.
+    try {
+      String(t);
+      expect.unreachable("coercion should have thrown");
+    } catch (e) {
+      expect((e as Error).message).toMatch(/unwrap/);
+      expect((e as Error).message).toMatch(/unsafeUnwrap/);
+    }
+  });
+
+  it("still allows JSON.stringify, which emits the label and never the value", () => {
+    // Deliberately NOT a tripwire. `value` is closed over rather than an own property, so a
+    // stringify already cannot leak it - and logging a Tainted is how somebody debugs one.
+    const json = JSON.stringify(t);
+    expect(() => JSON.parse(json)).not.toThrow();
+    expect(json).not.toContain("attacker.tld");
+    expect(json).toContain("UNTRUSTED_EXTERNAL");
+  });
+
+  it("leaves every sanctioned path working", () => {
+    expect(t.label.taint).toBe("UNTRUSTED_EXTERNAL");
+    expect(t.map((v) => v.length).label.taint).toBe("UNTRUSTED_EXTERNAL");
+    expect(t.unsafeUnwrap("test").value).toBe("secret@attacker.tld");
+  });
+
+  it("refuses a NUMERIC coercion too, not only a string one", () => {
+    // `Symbol.toPrimitive` receives a hint, and a rule that only refused the "string" hint would
+    // leave `Number(t)` and arithmetic silently producing NaN - a different wrong answer, equally
+    // quiet. Pinned separately because the hint is the thing that could regress.
+    expect(() => Number(t)).toThrow(/coerced to a primitive/);
+    expect(() => (t as unknown as number) * 2).toThrow(/coerced to a primitive/);
+  });
+
+  it("refuses an explicit toString(), which ToPrimitive never sees", () => {
+    // Found by an adversarial audit AFTER the tripwire shipped: `t.toString()` does not go through
+    // ToPrimitive, so `Symbol.toPrimitive` never fired and it silently returned "[object Object]" -
+    // on the call shape every logging helper uses. Four documents said "coercion now throws" and
+    // were wrong about this path. See DEFECTS_FOUND.md section 31.
+    expect(() => t.toString()).toThrow(/toString\(\) called on it/);
+  });
+
+  it("still cannot intercept Object.prototype.toString.call, and says so", () => {
+    // The gap that remains. Named rather than papered over: a borrowed `toString` is not a method
+    // call on the wrapper and nothing on the object can see it.
+    expect(Object.prototype.toString.call(t)).toBe("[object Object]");
+  });
+
+  it("does NOT propagate the label through a coercion a caller forces anyway", () => {
+    // The half that cannot be fixed, asserted so nobody reads the tripwire as more than it is.
+    //
+    // The first version of this test asserted `Object.hasOwn(Object(escaped), "label") === false`,
+    // which is VACUOUS - boxing any string yields a wrapper with no own `label`, under every
+    // implementation, so the assertion could not fail. An adversarial audit caught it. What follows
+    // is the load-bearing version: once a value is out of the wrapper, its label is whatever the
+    // next caller SAYS it is, and a hostile string can be relabelled CLEAN with no error at all.
+    const escaped = `${t.unsafeUnwrap("deliberate, for this test").value}`;
+    expect(typeof escaped).toBe("string");
+    expect(escaped).toBe("secret@attacker.tld");
+
+    // The laundering the docs warn about, demonstrated rather than described.
+    const relabelled = clean(escaped);
+    expect(relabelled.label.taint).toBe("CLEAN");
+    expect(t.label.taint).toBe("UNTRUSTED_EXTERNAL");
+  });
+});

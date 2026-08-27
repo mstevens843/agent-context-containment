@@ -10,7 +10,7 @@
 // five. That is the §17 shape once more: a rule describing a check that was never built.
 //
 // Generated BLOCKS solve this for tables. They cannot solve it for a number inside a sentence -
-// "declaring a send tool as read-only lets 17 of 17 attacks through" reads as prose and a block
+// "declaring a send tool as read-only lets 32 of 32 attacks through" reads as prose and a block
 // marker mid-sentence would wreck it. So instead: compute the fact, then scan every document for a
 // sentence stating a DIFFERENT value for that same fact.
 //
@@ -75,21 +75,40 @@ const testTotal = [...testOutput.matchAll(/Tests\s+(\d+) passed/g)].reduce(
 // registered fact different from the prose it replaces.
 const holdoutCount = (cases[SPLITS.indexOf("holdout")] ?? []).length;
 
+// The imported split's two halves, counted from the files upstream's rows are composed into. They
+// are registered SEPARATELY from the total because a correct total can hide two wrong halves: both
+// read (17) for a release while the total already said 62.
+const importedHalf = (file) =>
+  JSON.parse(readFileSync(join(ROOT, "corpus/imported", file), "utf8")).length;
+const directHarmCount = importedHalf("injecagent.json");
+const dataStealingCount = importedHalf("injecagent_ds.json");
+
 const examplesCount = ["examples", "examples/agents"].reduce(
   (n, dir) => n + readdirSync(join(ROOT, dir)).filter((f) => f.endsWith(".ts")).length,
   0,
 );
 
-// The gates in CI's `claim-gates` job. Counted from the workflow rather than from a list here, so
-// the number and the thing it describes cannot drift apart. `claimregistry.test.ts` separately
-// asserts WHICH gates are present; this only counts them.
+// The gates in CI's `claim-gates` job. `claimregistry.test.ts` separately asserts WHICH gates are
+// present; this only counts them.
+//
+// COUNTED FROM THE JOB, NOT FROM AN ALLOWLIST. The first version matched an alternation of gate
+// names written out here, which meant the count only moved when somebody remembered to edit it: a
+// gate was added to the workflow and this silently went on reporting the old number, so the fact
+// was under-counting the thing it exists to describe. Same failure as the mis-declaration pattern
+// whose denominator was a literal, and the same fix - read the artifact, do not restate it.
+//
+// `install` and `build` are setup, not gates. Everything else the job runs is a claim gate by
+// construction, so a new one is counted the day it is added.
 const ciYaml = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf8");
+const claimGatesJob = ciYaml.slice(
+  ciYaml.indexOf("  claim-gates:"),
+  ciYaml.indexOf("  # The git-object freeze"),
+);
 const ciGates =
-  [
-    ...ciYaml.matchAll(
-      /^\s*- run: pnpm (blocks:check|verify:numbers|audit:docs|audit:claims|audit:mutations|audit:release)$/gm,
-    ),
-  ].length + (ciYaml.includes("corpus/holdout/MANIFEST.sha256") ? 1 : 0);
+  [...claimGatesJob.matchAll(/^\s*- run: pnpm ([\w:-]+)/gm)]
+    .map((m) => m[1])
+    .filter((name) => name !== "install" && name !== "build").length +
+  (ciYaml.includes("corpus/holdout/MANIFEST.sha256") ? 1 : 0);
 
 // COUNTED FROM THE MARKERS, NOT FROM `blocks:check`. The first version shelled out to the checker
 // and read its summary line - which meant this script CRASHED, rather than reporting, whenever a
@@ -141,6 +160,9 @@ const mapping = run("node scripts/mapping-report.mjs");
 const understated = [...mapping.matchAll(/Permitted when the tool is UNDERSTATED\s+(\d+)\/(\d+)/g)];
 const dhBroken = Number(understated[0]?.[1] ?? -1);
 const dsBroken = Number(understated[1]?.[1] ?? -1);
+// The split sizes, so a pattern can never disagree with the corpus about how many rows there are.
+const dhTotal = Number(understated[0]?.[2] ?? -1);
+const dsTotal = Number(understated[1]?.[2] ?? -1);
 
 // ONLY CURRENT-STATE PHRASINGS. A historical number cannot go stale: "deleting the branch left 74 of
 // 74 tests passing" is a fact about a past state and stays true forever, as does a version-history
@@ -182,16 +204,54 @@ const ALL_FACTS = [
     id: "imported cases",
     value: importedCount,
     source: "pnpm import:check",
+    // `[*\s]*` between the fraction and the noun, for the same reason the mis-declaration patterns
+    // needed it: the documents write `**62/62** rebuild byte-identically` and a pattern demanding a
+    // plain space matched none of them. Three statements sat unregistered at a stale 34/34 through a
+    // release pass because of exactly this.
+    //
+    // The last two anchor TABLE CELLS - the release checklist row and the FINAL bolded cell of
+    // STATUS.md's history row. Earlier columns in that row are version history and cannot drift.
     patterns: [
-      /\b(\d+)\/\d+\s+rebuild byte-identically/gi,
+      /\b(\d+)\/\d+[*\s]+(?:rebuild|byte-identical)/gi,
       /\b(\d+)\s+`?imported`?\s*\(upstream/gi,
+      /`pnpm import:check`[^|\n]*\|\s*\*{0,2}(\d+)\/\d+/gi,
+      /\|\s*imports rebuilt from committed source\s*\|(?:[^|\n]*\|)*[^|\n]*?\*\*(\d+)\/\d+\*\*/gi,
+      /\|\s*`imported`\s*\((\d+)\)\s*\|/gi,
+      /\*\*(\d+)\s+`imported`\*\*/gi,
     ],
   },
   {
     id: "corpus cases",
     value: total,
     source: "pnpm report",
-    patterns: [/\b(\d+)\s+hand-written and imported/gi, /corpus is\s+(\d+)\s+hand-written/gi],
+    // The third pattern anchors the FINAL bolded cell of STATUS.md's history row. That cell held a
+    // stale value through a whole release pass because neither prose pattern reaches into a table,
+    // and an unregistered number in a release-facing document is a number nobody is checking.
+    // Earlier columns are version history and deliberately out of scope: they cannot drift.
+    patterns: [
+      /\b(\d+)\s+hand-written and imported/gi,
+      /corpus is\s+(\d+)\s+hand-written/gi,
+      /\|\s*hand-authored \+ imported corpus\s*\|(?:[^|\n]*\|)*[^|\n]*?\*\*(\d+)\*\*[^|\n]*\|/gi,
+      /\b(\d+)-case corpus\b/gi,
+      // Not followed by a percent sign: STATUS.md quotes an old line reading "the corpus is 100%\n      // author-written", and a rule that fires on ordinary English gets suppressed - see the `shows`
+      // lesson in claims.test.ts.
+      /\bThe corpus is\s+(\d+)(?![%\d])/gi,
+    ],
+  },
+  {
+    id: "direct-harm imported",
+    value: directHarmCount,
+    source: "corpus/imported/injecagent.json",
+    // Parenthesised, and the noun comes BEFORE the number - deliberately a different shape from the
+    // mis-declaration patterns, which read `N of 30 direct-harm`. Two facts about the same split
+    // sharing one sentence shape is how section 30 ended up reporting the wrong one as stale.
+    patterns: [/direct[- ]harm[*\s]*\((\d+)\)/gi],
+  },
+  {
+    id: "data-stealing imported",
+    value: dataStealingCount,
+    source: "corpus/imported/injecagent_ds.json",
+    patterns: [/data[- ]stealing[*\s]*\((\d+)\)/gi],
   },
   {
     id: "holdout cases",
@@ -270,16 +330,29 @@ const ALL_FACTS = [
     id: "direct-harm mis-declaration",
     value: dhBroken,
     source: "pnpm report:mapping",
-    // `[*\s]+` between the number and the noun: the docs write this as `**9 of 17** direct-harm`,
+    // `[*\s]+` between the number and the noun: the docs write this as `**21 of 30** direct-harm`,
     // and a pattern that required a plain space matched none of them. Two deliberately-broken values
     // passed before this was widened.
-    patterns: [/\b(\d+)[*\s]*(?:of|\/)[*\s]*17[*\s]+direct-harm/gi],
+    //
+    // THE DENOMINATOR IS READ FROM THE DATA, NOT TYPED. It used to be the literal `17`, and when the
+    // imported split grew to every row in the pinned fixture that pattern stopped matching any
+    // current-state sentence - it would have gone on matching only the HISTORICAL quotation in
+    // DEFECTS_FOUND.md §18 and reported that as the stale one. A fact whose pattern silently stops
+    // matching is a fact nobody is checking, which is §16 exactly. Computed, it cannot rot.
+    patterns: [
+      new RegExp(String.raw`\b(\d+)[*\s]*(?:of|/)[*\s]*${dhTotal}[*\s]+direct-harm`, "gi"),
+    ],
   },
   {
     id: "data-stealing mis-declaration",
     value: dsBroken,
     source: "pnpm report:mapping",
-    patterns: [/\b(\d+)[*\s]*(?:of|\/)[*\s]*17[*\s]+(?:imported[*\s]+)?data-stealing/gi],
+    patterns: [
+      new RegExp(
+        String.raw`\b(\d+)[*\s]*(?:of|/)[*\s]*${dsTotal}[*\s]+(?:imported[*\s]+)?data-stealing`,
+        "gi",
+      ),
+    ],
   },
 ];
 
@@ -422,7 +495,7 @@ if (unregistered.length > 12) console.log(`    ... and ${unregistered.length - 1
 // Lowering this number is the maintenance task. Raising it requires deciding, in a diff somebody
 // reviews, that a new hand-typed claim is worth it - which is the conversation that was never had
 // for any of the 112.
-const MAX_UNREGISTERED = 110;
+const MAX_UNREGISTERED = 100;
 let ratchetFailed = false;
 if (unregistered.length > MAX_UNREGISTERED) {
   ratchetFailed = true;

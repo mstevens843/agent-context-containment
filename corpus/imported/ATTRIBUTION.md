@@ -105,8 +105,8 @@ into two kinds:
 
 <!-- GENERATED:mapping-sensitivity -->
 ```
-direct harm    ROBUST to peer mappings 17/17   permitted when UNDERSTATED 9/17
-data stealing  ROBUST to peer mappings 17/17   permitted when UNDERSTATED 17/17
+direct harm    ROBUST to peer mappings 30/30   permitted when UNDERSTATED 21/30
+data stealing  ROBUST to peer mappings 32/32   permitted when UNDERSTATED 32/32
 ```
 <!-- /GENERATED -->
 

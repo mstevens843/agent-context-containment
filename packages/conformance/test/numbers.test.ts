@@ -31,6 +31,23 @@ describe("what the scanner counts as a numeric claim", () => {
     expect(numericClaims("17 of 17 data-stealing cases got through").length).toBeGreaterThan(0);
   });
 
+  it("does not count a table ROW LABEL, but still counts a claim in a leading cell", () => {
+    // The exemption and its limit, together. A leading cell that is entirely an integer is an index
+    // - it is how the row is cited - and cannot drift. A leading cell that says something is still a
+    // claim. Without the second half this exemption would be a hole shaped like a table.
+    expect(numericClaims("| 14 | **A limitation.** Some prose about it. | Open |")).toHaveLength(0);
+    expect(
+      numericClaims(
+        "| 12 | **Small corpus.** n=68 across five splits, 648 variants. | Structural |",
+      ),
+      "real numbers inside an exempted row stopped being counted",
+    ).toEqual(expect.arrayContaining(["68", "648"]));
+    expect(
+      numericClaims("| 21 of 30 direct-harm | still a claim |").length,
+      "a claim in a leading cell was swallowed by the row-label exemption",
+    ).toBeGreaterThan(0);
+  });
+
   it("does not count version strings", () => {
     // The single largest source of false positives, and the one that would have made the survey
     // useless: every heading in STATUS.md carries one.
@@ -113,7 +130,7 @@ describe("verify:numbers can fail, proven without touching a release document", 
 
   it("a stale registered number fails, and names the file and both values", () => {
     const doc = join(tmpdir(), "acc-stale-number.md");
-    // `102 hand-written and imported` is a registered fact. State it wrong.
+    // `130 hand-written and imported` is a registered fact. State it wrong.
     writeFileSync(doc, "The corpus is 4242 hand-written and imported cases.\n");
     try {
       const { failed, out } = runFast(doc);
@@ -129,7 +146,7 @@ describe("verify:numbers can fail, proven without touching a release document", 
   it("a correct registered number does not fail", () => {
     // The near-miss. A checker that failed on every document would pass the test above.
     const doc = join(tmpdir(), "acc-fresh-number.md");
-    writeFileSync(doc, "The corpus is 102 hand-written and imported cases.\n");
+    writeFileSync(doc, "The corpus is 130 hand-written and imported cases.\n");
     try {
       const { failed, out } = runFast(doc);
       expect(failed, `a CORRECT registered number was reported stale:\n${out}`).toBe(false);
@@ -203,5 +220,57 @@ describe("verify:numbers can fail, proven without touching a release document", 
     const { out } = runFast();
     expect(out).not.toMatch(/^\s*tests\s+0\s/m);
     expect(out).not.toContain("-1");
+  });
+
+  // THE TWO HALVES OF THE IMPORTED SPLIT, each with its own control.
+  //
+  // These exist because the TOTAL was registered and correct at 62 while both halves still read
+  // (17) in README.md - a correct sum over two wrong addends, which no check could see. A fact per
+  // half, and a control per fact, is the only arrangement that catches that.
+  const HALVES = [
+    [
+      "direct-harm imported",
+      "Two halves: direct-harm (4242) and data-stealing (32), reported apart.",
+    ],
+    [
+      "data-stealing imported",
+      "Two halves: direct-harm (30) and data-stealing (777), reported apart.",
+    ],
+  ] as const;
+
+  for (const [fact, sentence] of HALVES) {
+    it(`a wrong ${fact} count is caught, and the report names it`, () => {
+      const doc = join(tmpdir(), `acc-${fact.replace(/\s+/g, "-")}.md`);
+      writeFileSync(doc, `${sentence}\n`);
+      try {
+        const { failed, out } = runFast(doc);
+        expect(failed, `a wrong ${fact} was not reported stale:\n${out}`).toBe(true);
+        expect(out).toContain(fact);
+        expect(out).toContain(doc.split("/").pop() ?? "");
+      } finally {
+        rmSync(doc, { force: true });
+      }
+    });
+  }
+
+  it("the CORRECT half counts do not fail, so the controls above mean something", () => {
+    // The near-miss. Both controls would pass against a checker that flagged every sentence.
+    const doc = join(tmpdir(), "acc-halves-correct.md");
+    writeFileSync(doc, "Two halves: direct-harm (30) and data-stealing (32), reported apart.\n");
+    try {
+      const { failed, out } = runFast(doc);
+      expect(failed, `correct half counts were reported stale:\n${out}`).toBe(false);
+    } finally {
+      rmSync(doc, { force: true });
+    }
+  });
+
+  it("the halves are registered SEPARATELY from the total", () => {
+    // If either half were folded into `imported cases`, a correct total would keep hiding wrong
+    // halves - which is the exact failure these facts were added for.
+    const { out } = runFast();
+    expect(out).toMatch(/direct-harm imported\s+30\s/);
+    expect(out).toMatch(/data-stealing imported\s+32\s/);
+    expect(out).toMatch(/imported cases\s+62\s/);
   });
 });

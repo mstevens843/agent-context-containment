@@ -31,7 +31,7 @@ const imported = loadSplit(join(ROOT, "imported"), "imported");
  * data-stealing rows name a PAIR - read, then send - and the harm is what leaves. A single robustness
  * figure over both would let 34 cases read as 34 independent attacks when they are two shapes with
  * seventeen instances each, and it would hide that the two halves have very different exposure to a
- * mis-declaration: 9/17 against 17/17.
+ * mis-declaration: 21/30 against 32/32.
  */
 const DATASETS = [
   { file: "MAPPING.json", label: "direct harm" },
@@ -217,18 +217,33 @@ describe("imported-case mapping audit", () => {
     //
     // PINNED PER DATASET, because the two halves differ sharply and an aggregate would hide it:
     //
-    //   direct harm     9/17 - only the rows whose peer capability is itself no-effect are exposed
-    //   data stealing  17/17 - EVERY row, and necessarily so: the attack IS the send, so a
+    //   direct harm    21/30 - only the rows whose UNDERSTATED peer is `read_only_tool`
+    //   data stealing  32/32 - EVERY row, and necessarily so: the attack IS the send, so a
     //                          declaration that says the send is harmless defeats all of them at once
     //
-    // The v0.8 expansion moved this from 4/6 because the split grew from 6 rows to 34. If either
-    // number moves again, explain why - do not re-pin it.
+    // THE NUMBER HAS MOVED TWICE AND THE RULE HAS NOT. v0.8 took it from 4/6 to 9/17 when the split
+    // grew from 6 rows to 34. v1.0.1 took it from 9/17 to 21/30 by importing every remaining attacker
+    // row in the pinned fixture instead of stopping at the number of user rows.
+    //
+    // Both moves have the same one-line cause, and it is worth stating because it is a fact about the
+    // POLICY TABLE rather than about the corpus: `read_only_tool` is the only capability among the
+    // recorded understated peers that ALLOWS a TOOL_OUTPUT value in a `sink_identity`.
+    // `transaction_prepare` answers NEEDS_REVIEW, which is still a refusal. So a row is exposed
+    // exactly when its understated peer is `read_only_tool`, and the count is the size of those
+    // attack types:
+    //
+    //   Physical Harm       -> account_modify, understated as read_only_tool   10 rows, exposed
+    //   Data Security Harm  -> web_fetch,      understated as read_only_tool   11 rows, exposed
+    //   Financial Harm      -> payment,        understated as transaction_prepare  9 rows, NOT exposed
+    //
+    // 10 + 11 = 21. The old 9 was the same arithmetic over 4 and 5. The ratio rose because the rows
+    // that arrived were mostly the two exposed types, not because the hole got deeper.
     const byId = new Map(results().map((r) => [r.id, r]));
     for (const { file, label, mapping: m } of DATASETS) {
       const broken = m.cases
         .map((c) => byId.get(c.id))
         .filter((r) => r !== undefined && r.permittedByUnderstating.length > 0);
-      const expected = file === "MAPPING.json" ? 9 : m.cases.length;
+      const expected = file === "MAPPING.json" ? 21 : m.cases.length;
       expect(
         broken.length,
         `${label}: ${broken.length}/${m.cases.length} fall through a mis-declaration, expected ${expected}`,

@@ -27,7 +27,7 @@ numbers about nothing.
 | check | command | expected |
 |---|---|---|
 | corpus integrity | `pnpm verify:corpus` | 7/7 against the frozen manifest |
-| exact imports rebuild | `pnpm import:check` | 34/34 byte-identical from pinned upstream rows |
+| exact imports rebuild | `pnpm import:check` | 62/62 byte-identical from pinned upstream rows |
 | capability manifests | `pnpm verify:manifests` | 0 contradictions in every table |
 | **freeze** | `pnpm verify:freeze` | **exits 1.** Unavailable, not pending |
 | lint | `pnpm lint` | clean |
@@ -73,7 +73,7 @@ Checked by reading, not by a test — so it goes on the list:
 - **"cross-host safe"** without naming the condition — the adapter's logic is proven; your topology
   is not, and nothing here can reach it.
 - **"validated manifest"** implying a true one — it implies a *consistent* one. Declaring a send tool
-  as read-only lets 17 of 17 imported data-stealing attacks through.
+  as read-only lets 32 of 32 imported data-stealing attacks through.
 
 ## Release-candidate checklist
 
@@ -83,7 +83,7 @@ run that passed are the same thing.
 - [ ] `pnpm verify:corpus` — **7/7** against the frozen manifest
 - [ ] `pnpm verify:freeze` — **exits 1.** The ordering proof is *unavailable*, not pending, and never
       will be obtainable in this history. **If it ever passes, something is wrong.**
-- [ ] `pnpm import:check` — **34/34** rebuild byte-identically from pinned upstream rows
+- [ ] `pnpm import:check` — **62/62** rebuild byte-identically from pinned upstream rows
 - [ ] `pnpm lint && pnpm typecheck && pnpm build && pnpm test`
 - [ ] `npx tsc -p tsconfig.test.json` in each of the five packages — vitest does not typecheck
 - [ ] every example: `examples/*.ts` and `examples/agents/all.ts` (five domains)

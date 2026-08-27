@@ -150,3 +150,13 @@ export {
   formatReport,
   runCorpus,
 } from "./run.js";
+
+export {
+  type AdversaryFinding,
+  type AdversaryResult,
+  formatFindings,
+  loosenedPolicy,
+  searchAdversarially,
+} from "./adversary.js";
+
+export { MALFORMED_SHAPES, searchMalformed } from "./malformed.js";

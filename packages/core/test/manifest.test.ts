@@ -1,7 +1,7 @@
 // Capability-manifest validation, and the boundary it does not move.
 //
 // The engine enforces flow GIVEN the declaration. On the imported data-stealing split, declaring the
-// send tool as read-only lets **17 of 17** attacks through - not a corner case, the whole split. So
+// send tool as read-only lets **32 of 32** attacks through - not a corner case, the whole split. So
 // the first thing these tests establish is what validation CANNOT do, because "we validate the
 // manifest" invites the reading that a validated manifest is a true one. It is a consistent one.
 //

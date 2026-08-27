@@ -48,11 +48,11 @@ Found by adding an import and watching nothing fail.
 
 **What v1.0 built:**
 
-- **`pnpm audit:mutations`** — eleven critical branches, each deleted, rebuilt and re-tested, with the
+- **`pnpm audit:mutations`** — thirteen critical branches, each deleted, rebuilt and re-tested, with the
   tests required to **fail**. 8 of 8 caught. Two properties learned the hard way: it refuses to run
   unless the baseline is green (a differential measurement needs a starting point), and every `find`
   must match exactly once (three entries matched zero times and would have reported as caught).
-- **`docs/claims.json`** — 24 headline claims, each with its grade, the test that would fail if it
+- **`docs/claims.json`** — 26 headline claims, each with its grade, the test that would fail if it
   were false, its negative control, and the command that produces any number in it. Enforced: a
   PROVEN claim with no negative control fails the build, because that is the §15 shape exactly.
 - **Generated blocks** — a `GENERATED:<generator>` marker pair in README and STATUS, filled and verified from the
@@ -165,7 +165,7 @@ immediately found the claims were wrong in four places.
   construction, and `permissive` trips `STEERING_ADMITS_TOOL_DERIVED` twice.
 - **The imported split doubled**, 17 → 34, adding InjecAgent's data-stealing half: a **two-step**
   chain, read then send, where the direct-harm rows are single calls. Reported apart, because their
-  exposure to a mis-declaration differs sharply — **9/17 against 17/17**.
+  exposure to a mis-declaration differs sharply — **21/30 against 32/32**.
 - **Four review workflows** across support, email, DevOps and research, modelling propose → decide →
   review → execute → feed back, with the replay attempted after every approval.
 
@@ -267,11 +267,11 @@ engine. The benign column is the only thing that tells them apart.
 
 | | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 | v1.0.1 |
 |---|---|---|---|---|---|---|
-| tests | 263 | 304 | 361 | 414 | 534 | **578** |
-| hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **102** |
+| tests | 263 | 304 | 361 | 414 | 534 | **605** |
+| hand-authored + imported corpus | 68 | 68 | 68 | 96 | 98 | **130** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 | 7 |
 | non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 | 34 |
-| imports rebuilt from committed source | 0 | 0 | 6/6 | 34/34 | 34/34 | 34/34 |
+| imports rebuilt from committed source | 0 | 0 | 6/6 | 34/34 | 34/34 | **62/62** |
 | upstream attack SHAPES imported | 1 | 1 | 1 | 2 | 2 | 2 |
 | packages | 5 | 5 | 5 | 5 | 5 | 5 |
 | mutants | 8 | 8 | 8 | 8 | 9 + 3 ledger stores | **9 + 3 ledger stores** |
@@ -281,7 +281,7 @@ engine. The benign column is the only thing that tells them apart.
 | **real-database proof scenarios** | 0 | 0 | 0 | 0 | 11, live Postgres | **11, live Postgres** |
 | review workflows | 0 | 0 | 0 | 4 | 4 | 4 |
 | **reviewer decides for itself** | no | no | no | no | yes | **yes** |
-| defects recorded | 7 | 8 | 8 | 14 | 22 | **27** |
+| defects recorded | 7 | 8 | 8 | 14 | 22 | **33** |
 | decisions produced by corpus | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
 
 **v0.8 is the first pass since v0.4 to add corpus cases, and it added no engine capability.** The 28
@@ -307,11 +307,11 @@ SILENT ATTACKS - no injection wording for any text detector to find
   split         n    containment    classifier
   holdout       6    6/6            0/6
   holdout_v2    4    4/4            0/4
-  tuning       12    12/12          0/12
+  tuning       14    14/14          0/14
   derived       7    7/7            0/7
   adaptive      6    6/6            0/6
-  imported     34    34/34          0/34
-               69    69/69          0/69
+  imported     62    62/62          0/62
+               99    99/99          0/99
 ```
 
 The classifier also over-blocks 3 of 6 benign holdout cases, because they quote attack strings. Both
@@ -334,23 +334,23 @@ Counted, not remembered — these were stale for four versions before v0.6.
 <!-- GENERATED:repo-stats -->
 | | |
 |---|---|
-| Source LOC | **11,485** across 5 packages |
-| Test LOC | **10,662** across 44 files |
+| Source LOC | **12,244** across 5 packages |
+| Test LOC | **11,012** across 46 files |
 | Example LOC | **1,843** across 15 files |
-| Script LOC | **3,136** — 19 report/proof/import scripts, 6 shell |
-| Total TypeScript | **23,990** |
-| Docs (docs/) | **5,028 lines** across 24 files |
+| Script LOC | **3,384** — 20 report/proof/import scripts, 6 shell |
+| Total TypeScript | **25,099** |
+| Docs (docs/) | **5,449 lines** across 24 files |
 <!-- /GENERATED -->
 
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
-| `core` | 256 |
-| `conformance` | 220 |
+| `core` | 265 |
+| `conformance` | 238 |
 | `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **578** |
+| **total** | **605** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -358,13 +358,13 @@ Counted, not remembered — these were stale for four versions before v0.6.
 <!-- GENERATED:corpus-splits -->
 | split | n | | source kind | n |
 |---|---|---|---|---|
-| `holdout` | 16 | | `original` | 59 |
-| `holdout_v2` | 6 | | `imported` | 34 |
+| `holdout` | 16 | | `imported` | 62 |
+| `holdout_v2` | 6 | | `original` | 59 |
 | `tuning` | 29 | | `derived` | 8 |
 | `derived` | 9 | | `cve_derived` | 1 |
 | `adaptive` | 8 | |  |  |
-| `imported` | 34 | |  |  |
-| **total** | **102** | | | |
+| `imported` | 62 | |  |  |
+| **total** | **130** | | | |
 <!-- /GENERATED -->
 
 Plus **648 generated** variants, built at run time from the frozen bases and never pooled with the rest.
@@ -383,7 +383,7 @@ it was cited for, and §11 was "fixed" when it was mitigated.
 |---|---|---|
 | the pure core has no imports, clock, randomness or `Promise` | **PROVEN** | `contract.test.ts` fails the build |
 | the v0 holdout's bytes match its manifest | **PROVEN** | 7/7, gated in CI before install |
-| imported cases are upstream's bytes | **PROVEN** | 34/34 rebuild byte-identically |
+| imported cases are upstream's bytes | **PROVEN** | 62/62 rebuild byte-identically |
 | a receipt admits one value, into one **SLOT**, once | **PROVEN** | `argidentity.test.ts`, corpus `slot-t-001` + control, mutant M9 |
 | the guard re-decides when it loses a receipt race | **PROVEN** | tested with a store that models the race; deleting the branch fails 2 of 77. It was **graded PROVEN on a test that could not fail** until an audit caught it — see §15 |
 | every capability table is self-consistent | **PROVEN** | 0 contradictions across 5 tables |
@@ -394,6 +394,14 @@ it was cited for, and §11 was "fixed" when it was mitigated.
 | the async reservation protocol | **ADAPTER-PROVEN** | against UNIQUE-constraint semantics in-process |
 | cross-host safety, sync path | **ADAPTER-PROVEN** | `proveCrossHost`, 5 interleavings |
 | the real-database proof, on a run without `DATABASE_URL` | **SKIPPED / NOT PROVEN** | reported as skipped, never as a pass |
+
+**Last operator-run of the opt-in proof:** August 2026, against PostgreSQL 17.6 (Homebrew) on Apple
+silicon, every scenario passing including the read-then-write negative control. Recorded
+with its version and date because the row above says the result holds for that database, that version
+and that topology only, and a result whose subject is unnamed cannot be checked by anybody later. It
+does not change the grade: nothing runs this without `DATABASE_URL`, CI sets none, and SKIPPED is what
+this registry defines that to mean. Grading it otherwise is defect section 19, which is exactly how
+this entry read before v1.0.
 | that *your* hosts share *one* database | **DELEGATED TO CALLER** | `sharedAcrossHosts` is a question, not an inference |
 | that a capability declaration is honest | **DELEGATED TO CALLER** | validation catches self-contradiction; advisories read names |
 | that argument `path`s are honest | **DELEGATED TO CALLER** | two args with one path is a caller bug, handled safely |
@@ -401,12 +409,12 @@ it was cited for, and §11 was "fixed" when it was mitigated.
 | that the holdout predates the engine | **NOT CLAIMED** | attempted, correctly rejected, unavailable |
 | that a validated manifest is an honest one | **NOT CLAIMED** | it is a *consistent* one |
 | that the review workflows establish human judgement | **NOT CLAIMED** | mechanics and judgement reported apart |
-| a wrong capability declaration | **KNOWN RISK** | 9/17 direct-harm, **17/17** data-stealing |
-| the taint is cooperative, not enforced | **KNOWN RISK** | there is no membrane in JavaScript |
+| a wrong capability declaration | **KNOWN RISK** | 21/30 direct-harm, **32/32** data-stealing |
+| the taint is cooperative, not enforced | **KNOWN RISK** | there is no membrane in JavaScript. Coercion and toString() now throw instead of silently stringifying, which is a tripwire on the accidental path and not a membrane: a coercion returns a primitive, and a primitive cannot carry a label |
 | **the ingestion helpers infer nothing** | **PROVEN** | a hostile page declared `SYSTEM` is ALLOWED outright — `ingest.test.ts` asserts it, so the trust boundary is never a surprise |
 | `contextOf` refuses a dangling edge | **PROVEN** | an unresolvable edge would read as CLEAN — a laundering path that looks like a typo |
 | that a declaration is honest | **DELEGATED TO CALLER** | the helpers make it harder to mistype, never harder to lie |
-| **that these tests could actually fail** | **PROVEN, for 11 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
+| **that these tests could actually fail** | **PROVEN, for 13 listed branches** | `pnpm audit:mutations` deletes each fix and requires the tests to notice. A floor, not a ceiling: it says nothing about branches nobody listed, which is how §15 and §16 happened |
 | that every claim here is in the registry | **NOT CLAIMED** | `docs/claims.json` holds the 20 a reader would quote, not every sentence |
 | that the audit machinery has no blind spots | **NOT CLAIMED** | it was written by the person whose claims it checks, and shares his blind spots exactly. The independent reader is the only control that does not |
 | `staleAfterMs` has no free value | **KNOWN RISK** | too long strands a receipt, too short double-spends |
@@ -418,10 +426,10 @@ pnpm install
 pnpm release:report --markdown     # the whole gate, then the whole report
 # which runs, in order:
 pnpm verify:corpus                 # 7/7 against the frozen manifest
-pnpm import:check                  # 34/34 rebuild byte-identically
+pnpm import:check                  # 62/62 rebuild byte-identically
 pnpm verify:manifests              # 0 contradictions across 5 tables
 pnpm verify:freeze                 # exits 1, by design
-pnpm lint && pnpm typecheck && pnpm build && pnpm test     # 578 tests
+pnpm lint && pnpm typecheck && pnpm build && pnpm test     # 605 tests
 pnpm prove:crosshost               # sync adapter logic
 pnpm prove:asyncledger             # async protocol, in-process
 DATABASE_URL=postgres://localhost/containment_ledger_test pnpm prove:postgres   # 11/11, live DB
@@ -492,13 +500,13 @@ alone has never counted in this repository.
 | exact imports, 34 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
 | lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 578** (534 before this pass) |
+| test | **PASS — 605** (534 before this pass) |
 | `decide()` is total: no input throws, every malformed one is denied | **PASS**, explicit shapes plus a seeded sweep |
 | a provenance DAG resolves by path, and a cycle still fails closed | **PASS**, diamond and cycle pinned separately |
 | an unrecognised parameter role admits clean input only | **PASS**, and it could ALLOW before |
 | source comments checked for absolute claims | **PASS**, and an injected false claim is caught |
 | `examples/` typechecked | **PASS** — nothing typechecked that directory until this pass |
-| claim gates in CI: `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations` | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
+| claim gates in CI: `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations`, `adversary` | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
 | adversarial mutation sweep, 105 guards | **73 protected · 30 unguarded · 2 unreachable** when first swept. **All 30 are now closed**, each written against its mutation and each watched to fail under it — 9 in §19, 18 in §20, 3 in §21. The 2 unreachable are dispositioned, not covered: see the branch-risk table below |
 | per-package `tsconfig.test.json` | **PASS** ×5 |
 | examples ×15, playground matrix | **PASS** |
@@ -523,7 +531,7 @@ alone has never counted in this repository.
 | reviewer and engine demonstrably disagree, both directions | **PASS** |
 | semantic advisories: 0 false positives on 10 honest bindings | **PASS** |
 | prose guard: no document overstates | **PASS**, and an injected false claim is caught |
-| mutation audit, 11 critical branches | **11/11 caught** — deleting any fix fails a test |
+| mutation audit, 13 critical branches | **13/13 caught** — deleting any fix fails a test |
 | mutation audit refuses a non-green baseline | **PASS** — a differential measurement needs a starting point |
 | mutation audit refuses a zero-match entry | **PASS** — caught 3 of its own entries on the first run |
 | generated blocks match their generators | **PASS**, and it caught its first real drift within minutes |
@@ -599,16 +607,19 @@ re-checked.
 
 | | |
 |---|---|
-| **Exact upstream content** | 6 cases, `corpus/imported/` — InjecAgent, MIT, commit `f19c9f2`, composed by upstream's own substitution rule. Byte for byte, not paraphrased |
+| **Exact upstream content** | 62 cases, `corpus/imported/` — InjecAgent, MIT, commit `f19c9f2`, composed by upstream's own substitution rule. Byte for byte, not paraphrased. Rebuilt from committed source rows and byte-checked by `pnpm import:check` |
 | **Hand-derived shapes** | 9 cases, `corpus/derived/` — AgentDojo and InjecAgent attack shapes restated in this schema. Labelled `HAND-DERIVED`, enforced by a test. Not a benchmark run |
-| **Everything else** | 53 cases, mine |
+| **Everything else** | 59 cases, mine |
 
 **The grading is mine in all three.** That is the residual, and v0.6 measures it rather than
 asserting it away: `corpus/imported/MAPPING.json` records the capability I chose and the ones a
 different reviewer could defend, and `pnpm report:mapping` re-runs every case under all of them.
-**6/6 hold** under every peer mapping — so those refusals are evidence about the attacks. **4/6 fall**
-if the tool is declared weaker than it is, which is out of contract and reported anyway, because a
-paragraph saying "the declaration is trusted input" is easy to skim and `4/6` is not.
+**Every case in both datasets holds** under every peer mapping — so those refusals are
+evidence about the attacks. **21/30 direct-harm and 32/32 data-stealing fall** if the tool is
+declared weaker than it is, which is out of contract and reported anyway, because a paragraph saying
+"the declaration is trusted input" is easy to skim and those fractions are not. The v0.6 text here
+read `6/6` and `4/6`, correct when the split held six cases and stale for two releases afterwards —
+which is the same failure as §18 and is why the fractions are now registered facts rather than prose.
 
 The structural mitigations — held-out split, branded case ids, reason-level grading, mutant
 discrimination, splits never pooled — reduce self-deception. They do not remove it, and **no mechanism
@@ -641,18 +652,22 @@ reviews the engine's reasons); and the "is this just wallet safety" objection (f
 demos, with a test that the engine knows no domain vocabulary).
 
 **Open, and structural:** no real adaptive attacker — the adaptive split, the 648 generated variants
-and the 48 generated agent runs are all mine, and nobody iterates against the engine. No model in the
+and the 48 generated agent runs are all mine. Something now iterates: `pnpm adversary` searches
+randomly-structured decisions against an independently written taint walk, and it catches defect §23
+when that defect is put back. It does not learn and it does not read the engine to choose its next
+move, so it widens the net rather than closing the gap. No model in the
 loop, so no equivalent of CaMeL's 77-versus-84. The taint is cooperative, not enforced: there is no
-membrane in JavaScript. Nothing is cross-host safe. n=68 hand-written cases is a test suite, not a
-benchmark. And the capability declaration is trusted input — now priced at **4/6** on the imported
-split.
+membrane in JavaScript, though coercion is now a tripwire. No ledger here is cross-host safe without
+proving it, and `sharedAcrossHosts` stays a question the adapter asks rather than an answer it gives.
+A corpus of this size is a test suite, not a benchmark. And the capability declaration is trusted
+input — priced at **21/30** on the direct-harm split and **32/32** on the data-stealing one.
 
 **Open, and specific to v0.8's own additions:** the async protocol is proven against a fake with real
 UNIQUE semantics; the real-database half is **SKIPPED / NOT PROVEN** without `DATABASE_URL`, and is
 reported that way rather than omitted. A crash between `reserve` and `consume` strands a receipt until
 stale-reclaim; there is no free value for `staleAfterMs` and the adapter says so in its own caveat.
 Manifest validation catches self-contradiction only — a consistently wrong declaration is invisible,
-priced at **17/17** on the data-stealing split. And the review workflows declare their reviewers'
+priced at **32/32** on the data-stealing split. And the review workflows declare their reviewers'
 decisions, so they model the mechanics of approval and not a human's judgement.
 
 **Open, and specific to v0.7's own additions:** the cross-host proof runs against a store with

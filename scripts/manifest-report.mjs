@@ -74,7 +74,7 @@ for (const [label, b] of [
 console.log("");
 console.log(rule);
 console.log("  A manifest with no contradictions is CONSISTENT, not TRUE. On the imported");
-console.log("  data-stealing split, declaring the send tool as read-only lets 17 of 17 attacks");
+console.log("  data-stealing split, declaring the send tool as read-only lets 32 of 32 attacks");
 console.log("  through - and nothing in this report can see it, because nothing inside such a");
 console.log("  declaration contradicts anything else inside it. See docs/CAPABILITY_MANIFESTS.md.");
 console.log(rule);

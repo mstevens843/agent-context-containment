@@ -11,6 +11,7 @@
     "node": ">=20 <25"
   },
   "scripts": {
+    "adversary": "node scripts/adversary-report.mjs",
     "audit:claims": "npx vitest run packages/conformance/test/claimregistry.test.ts packages/conformance/test/claims.test.ts packages/conformance/test/classifierclaims.test.ts",
     "audit:docs": "node scripts/audit-docs.mjs",
     "audit:mutations": "node scripts/audit-mutations.mjs",

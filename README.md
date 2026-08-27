@@ -110,14 +110,16 @@ paragraph above.
   opinion about what the model should say. The model is untrusted by construction and the policy
   never asks it anything.
 - **Not a proof that this policy is optimal.** `reference` makes no error on any split here, and that
-  is a fact about a 98-case corpus rather than a result. `pnpm report:frontier` plots five profiles
+  is a fact about a 130-case corpus rather than a result. `pnpm report:frontier` plots five profiles
   and **two are undominated** — the arithmetic cannot pick between them, and
   [docs/POLICY_CHOICE.md](docs/POLICY_CHOICE.md) argues the choice rather than computing it.
 - **Not enforced taint.** The wrapper is cooperative. There is no membrane in JavaScript: `map(f)`
   hands `f` the raw value, `unsafeUnwrap` exists, and anywhere `Tainted` is not threaded there is no
-  taint at all.
+  taint at all. Coercion is now a **tripwire** rather than a membrane - interpolating a tainted value
+  throws instead of silently producing `[object Object]` - but the result of a coercion is a
+  primitive and a primitive cannot carry a label, so propagation remains impossible.
 - **Not safe against a wrong capability declaration.** It enforces flow *given* the declaration.
-  Declare a send tool as `read_only_tool` and **17 of 17** imported data-stealing attacks go straight
+  Declare a send tool as `read_only_tool` and **32 of 32** imported data-stealing attacks go straight
   through — measured, not estimated. `validatePolicy` catches manifests that contradict *themselves*;
   nothing catches one that is consistently wrong. See [docs/CAPABILITY_MANIFESTS.md](docs/CAPABILITY_MANIFESTS.md).
 
@@ -138,7 +140,7 @@ catches every overt attack here.
 
 ### Across all six splits
 
-The corpus is 102 hand-written and imported cases in six splits, plus 648 generated variants, reported
+The corpus is 130 hand-written and imported cases in six splits, plus 648 generated variants, reported
 side by side and **never pooled** — they are not samples from one population, and one headline number
 over all of them would claim more than any of them supports.
 
@@ -156,14 +158,14 @@ numbers, and three of them were wrong by the time anyone read them.
   tuning        29   15/15    14/14     1        1/15     14/14     14   0
   derived       9    7/7      2/2       0        0/7      2/2       7    0
   adaptive      8    6/6      2/2       0        0/6      2/2       6    0
-  imported      34   34/34      -       0        0/34       -       34   0
+  imported      62   62/62      -       0        0/62       -       62   0
 
   SILENT ATTACKS - no injection wording for any text detector to find
-                71   71/71                       0/71
+                99   99/99                       0/99
 
   UTILITY - what survives the policy
     over-blocked   0/26 benign cases refused
-    under-blocked  0/75 attacks allowed
+    under-blocked  0/103 attacks allowed
 ```
 <!-- /GENERATED -->
 
@@ -201,17 +203,17 @@ the corpus can see it.
 |---|---|
 | `holdout` (16) | frozen by manifest, CI-gated. Written before the engine — but that ordering was never committed, so it is **not provable**. See below |
 | `holdout_v2` (6) | frozen, authored *after* the engine. Closes v0's laundering gap. **Not a blind instrument** |
-| `tuning` (25) | freely editable. Agreement here is close to tautological |
+| `tuning` (29) | freely editable. Agreement here is close to tautological |
 | `derived` (9) | attack shapes designed by **other people** — hand-derived, not ported |
 | `adaptive` (8) | evasions that follow from knowing the design: extra hops, field extraction, a "safe display label", a valid signature spent outside its purpose, a valid receipt spent outside its slot. **Not a real adaptive attacker** |
-| `imported` (34) | **upstream's own case content, byte for byte** — InjecAgent, MIT, at a pinned commit, composed by their documented rule and rebuilt byte-identically by `pnpm import:check`. Two halves: direct-harm (17) and data-stealing (17), reported apart. The only material here that is not my words. The *grading* is still mine — see below |
+| `imported` (62) | **upstream's own case content, byte for byte** — InjecAgent, MIT, at a pinned commit, composed by their documented rule and rebuilt byte-identically by `pnpm import:check`. Two halves: direct-harm (30) and data-stealing (32), reported apart. The only material here that is not my words. The *grading* is still mine — see below |
 | `generated` (648) | mechanical transforms of 8 bases, built at run time. Never pooled with the rest |
 
-Provenance of the material, enforced by the schema rather than described: **34 `imported`**
+Provenance of the material, enforced by the schema rather than described: **62 `imported`**
 (upstream's bytes, rebuilt from committed source rows and byte-checked by `pnpm import:check` — two
 InjecAgent halves, direct-harm and data-stealing, reported apart because they are two attack shapes),
 **8 `derived`** + **1 `cve_derived`** (hand-written restatements — upstream's idea, my words),
-**55 `original`**. Filing a hand-derived case as an import is a corpus error, not a style choice; see
+**59 `original`**. Filing a hand-derived case as an import is a corpus error, not a style choice; see
 [docs/IMPORT_PROCESS.md](docs/IMPORT_PROCESS.md).
 
 Read the containment column with its caveat: a flat line across splits is partly a *prediction of the
@@ -227,8 +229,8 @@ imported case, the capability I chose *and* the ones another reviewer could have
 
 ```
                           direct harm    data stealing
-ROBUST to peer mappings      17/17           17/17
-Permitted when UNDERSTATED    9/17           17/17
+ROBUST to peer mappings      30/30           32/32
+Permitted when UNDERSTATED   21/30           32/32
 ```
 
 Read together or not at all. The first says the result does not depend on which of several defensible
@@ -452,14 +454,14 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **578 tests across five packages.**
+the pure core grows a clock or an import. **605 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through
 retrieval, not ranking. The render-safety check on confirmed values catches bidi overrides and
 zero-width characters but cannot see pixels.
 
-**Scaffolding:** 102 hand-written and imported cases. This is a test suite, not a benchmark. **No
+**Scaffolding:** 130 hand-written and imported cases. This is a test suite, not a benchmark. **No
 adaptive attacker** — the adaptive split and the 648 generated variants are both mine, and nobody
 iterates against the engine. **No model in the loop anywhere**: the agent-run simulator declares its
 reactions, so it cannot surprise the policy the way a real planner would, and CaMeL's honest "77 vs
@@ -568,7 +570,7 @@ so none of it has to be taken on trust.
 | classifier vs containment, per split | `pnpm report` | the split tables, never pooled |
 | the safety/utility tradeoff | `pnpm report:frontier` | five profiles, **two undominated** |
 | how much rests on my capability mapping | `pnpm report:mapping` | robust to peers, per dataset |
-| upstream's bytes really are upstream's | `pnpm import:check` | 34/34 rebuild byte-identically |
+| upstream's bytes really are upstream's | `pnpm import:check` | 62/62 rebuild byte-identically |
 | every capability table is self-consistent | `pnpm verify:manifests` | 0 contradictions, and the suspicions |
 | a review workflow end to end | `pnpm report:workflows` | approve, execute, and the replay refused |
 | the cross-host ledger claim | `pnpm prove:crosshost`, `pnpm prove:asyncledger` | adapter logic, in-process |

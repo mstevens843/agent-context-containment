@@ -16,7 +16,7 @@ run over their own policy.
 Deliberately `0.1.0` and not `1.0.0`. The evidence supports the mechanism, not an API-stability
 promise: the git-object ordering proof is UNAVAILABLE and `verify:freeze` exits 1 by design, the
 live-Postgres concurrency proof is opt-in and holds only for the database, version and topology it
-was run against, and the corpus is 102 hand-written and imported cases. "v1.0" elsewhere in this
+was run against, and the corpus is 130 hand-written and imported cases. "v1.0" elsewhere in this
 repository is an internal hardening milestone, not this version number.
 
 What the release packet does claim, and what backs each claim, is in `docs/claims.json` with a grade,
@@ -50,3 +50,31 @@ the guard now walks source comments too, and found a second false claim on its f
 `docs/QUICKSTART.md`, `examples/integration-template.ts`, `CONTRIBUTING.md` and `CODE_OF_CONDUCT.md`
 are new. `examples/` is now typechecked, which it never was, and that immediately found the
 `nodeLockingFs(fs)` line printed in three READMEs failing to compile against `node:fs`.
+
+The pass then went after the standing limitations rather than restating them.
+
+**Circularity, reduced with material that was already in the tree.** `corpus/imported/source/` holds
+pinned upstream fixtures with more attacker rows than were ever used: the import stopped at the
+number of user rows and its own prose called that "every pairable row". Pairing every remaining row
+by upstream's own cartesian design took imported cases from 34 to 62 and the corpus from 102 to 130
+(98 at the start of the release pass; the four provenance-DAG cases added earlier account for the
+rest, and those are the author's).
+The grading did not become more the author's: `mapping.test.ts` requires a capability to be a pure
+function of upstream's attack type, and every new row carries a type that was already mapped.
+
+**Something now iterates against the engine.** `pnpm adversary` generates provenance graphs and
+argument shapes nobody wrote - chains, diamonds, stacked diamonds, cycles, dangling edges, wide
+fan-ins - and checks them against a taint walk written independently of the engine's. It is not an
+adaptive attacker: it does not learn and does not read the engine to choose its next move. It is also
+not decorative. With the diamond defect reintroduced it finds the disagreement in the hundreds within
+a few thousand decisions, having been told nothing about what to look for, and it is a CI gate with
+its own negative control.
+
+**Coercion is a tripwire now, and still not a membrane.** Interpolating a tainted value used to
+produce `[object Object]` silently. It throws and names the way out. The label still cannot survive a
+coercion - a primitive cannot carry one - and a test asserts that, so the change cannot be read as
+more than it is.
+
+Three checkers were found to be measuring less than they appeared to: a mis-declaration pattern whose
+denominator was a literal that had stopped matching any live sentence, a CI gate counter with a
+hardcoded list, and the prose guard's coverage line using its own injection list as denominator.

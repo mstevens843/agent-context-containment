@@ -80,6 +80,11 @@ jobs:
       # Delete each recorded fix and require a named test to fail. A mutation nothing bites is a
       # branch nobody is protecting.
       - run: pnpm audit:mutations
+      # The property search. Deterministic, seeded, and it carries its own negative control: the
+      # script exits non-zero if the loosened-table control finds NOTHING, because a search whose
+      # control is silent is a search reporting its own optimism. Runs a far larger sweep than the
+      # copy inside `pnpm test`, which is capped so the suite stays fast.
+      - run: pnpm adversary
       # The whole deterministic release audit, which is a superset of the steps above and also
       # re-runs the corpus, the proofs and the freeze-state check. Kept as its own step so a failure
       # names `audit:release` rather than whichever gate it happened to reach first.

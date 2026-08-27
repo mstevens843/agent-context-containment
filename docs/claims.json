@@ -34,7 +34,7 @@
     },
     {
       "id": "imports-are-upstream-bytes",
-      "claim": "34 imported cases rebuild byte-identically from committed upstream source rows.",
+      "claim": "62 imported cases rebuild byte-identically from committed upstream source rows.",
       "grade": "PROVEN",
       "test": "packages/conformance/test/import.test.ts",
       "generatedBy": "pnpm import:check",
@@ -75,7 +75,7 @@
     },
     {
       "id": "silent-attacks",
-      "claim": "71 of 71 silent attacks are contained; the classifier catches 0.",
+      "claim": "99 of 99 silent attacks are contained; the classifier catches 0.",
       "grade": "ADAPTER-PROVEN",
       "test": "packages/conformance/test/splits.test.ts",
       "generatedBy": "pnpm report",
@@ -152,7 +152,7 @@
     },
     {
       "id": "misdeclaration-cost",
-      "claim": "A tool declared weaker than it is lets 9 of 17 direct-harm and 17 of 17 data-stealing imported attacks through.",
+      "claim": "A tool declared weaker than it is lets 21 of 30 direct-harm and 32 of 32 data-stealing imported attacks through.",
       "grade": "KNOWN-RISK",
       "test": "packages/conformance/test/mapping.test.ts",
       "generatedBy": "pnpm report:mapping"
@@ -198,6 +198,25 @@
       "negativeControl": "mutation entry `unknown-role-fails-closed`: neutralising the KNOWN_ROLES check in packages/core/src/policy.ts must fail the role tests",
       "mutation": "unknown-role-fails-closed",
       "note": "The one defect in this pass that could ALLOW something. ceilingFor asked whether a role was in the STEERING set; a misspelling is not in that set, so it fell through to defaultCeiling and an attacker-controlled recipient on email_send became an ALLOW purely by mislabelling the argument. Not a non-steering role and not a role at all are different facts. See docs/DEFECTS_FOUND.md."
+    },
+    {
+      "id": "property-search-iterates",
+      "claim": "A seeded search over generated provenance graphs and argument shapes finds no disagreement between the engine and an independently written taint walk, and no permitted value above its ceiling.",
+      "grade": "PROVEN",
+      "test": "packages/conformance/test/adversary.test.ts",
+      "negativeControl": "the same search run against a table whose ceilings are raised, judged against the shipped ceilings, must report under-blocks; and mutation entry `dag-path-scoped` must turn this file red",
+      "mutation": "dag-path-scoped",
+      "generatedBy": "pnpm adversary",
+      "note": "A CLEAN RUN IS A STATEMENT ABOUT THE SPACE EXPLORED, NOT A PROOF OF ABSENCE. The search generates graph shapes and argument shapes; it generates no receipts, no ledger state and no multi-step runs, and the shape vocabulary is the author’s. What it changes is that the structures are not ones anybody sat down and wrote: with defect section 23 reintroduced it finds the diamond in the hundreds within a few thousand decisions, without being handed the failing CASE - though the shape vocabulary does contain `diamond` and `stacked_diamond`, written after section 23 was known, so it was handed the failing SHAPE. Removing both of those shapes still leaves findings, by way of `fan_in`; removing every reconvergent shape leaves none. That is why the limitation in docs/LIMITATIONS.md is reduced rather than closed."
+    },
+    {
+      "id": "coercion-is-a-tripwire",
+      "claim": "Coercing a Tainted value to a primitive throws instead of silently stringifying, and the label still does not survive a coercion.",
+      "grade": "PROVEN",
+      "test": "packages/core/test/taint.test.ts",
+      "negativeControl": "mutation entry `coercion-is-a-tripwire`: making the coercion return a string instead of throwing must fail the taint tests",
+      "mutation": "coercion-is-a-tripwire",
+      "note": "A TRIPWIRE, NOT A MEMBRANE, and the claim is worded to keep that distinction. Propagation is impossible in JavaScript - a coercion returns a primitive and a primitive cannot carry a label - and a test demonstrates it by unwrapping the hostile value and relabelling the result CLEAN. That test does NOT exercise a coercion - a coercion throws, so there is no result to inspect - and it passes with the tripwire removed. It documents the boundary; the mutation entry is what defends the tripwire itself. Section 31 recorded the earlier wording here as an overstatement and this entry reproduced it; section 33 records that. What this closes is the accidental path: template interpolation, String(), and concatenation used to produce the string [object Object] with no signal. It does nothing about map(), unsafeUnwrap(), or a value that was never wrapped. See docs/DEFECTS_FOUND.md."
     }
   ]
 }

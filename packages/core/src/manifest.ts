@@ -3,7 +3,7 @@
 // THE PROBLEM THIS DOES NOT SOLVE, first, because overselling it would be the same error as calling
 // this library information-flow control. The engine enforces flow GIVEN the declaration. If a tool
 // that emails your inbox to a stranger is declared `read_only_tool`, containment permits it - and on
-// the imported data-stealing split that is not a corner case, it is **17 of 17**. No function over a
+// the imported data-stealing split that is not a corner case, it is **32 of 32**. No function over a
 // manifest detects that, because nothing inside the declaration contradicts anything else inside it.
 // A lie that is internally consistent is invisible from the inside.
 //
@@ -269,7 +269,7 @@ export function formatManifestFindings(findings: readonly ManifestFinding[]): st
   }
   lines.push(
     "  A manifest with no contradictions is CONSISTENT, not TRUE. Nothing here can detect a tool",
-    "  declared weaker than it is - measured at 17/17 on the imported data-stealing split - because",
+    "  declared weaker than it is - measured at 32/32 on the imported data-stealing split - because",
     "  nothing inside such a declaration contradicts anything else inside it.",
   );
   return lines.join("\n");

@@ -152,19 +152,25 @@ import {`,
     memo.set(frame.id, settled);`,
     replace: `    stack.pop();
     settled = { taint: frame.taint, provenance: frame.provenance };`,
-    tests: "packages/core/test/provenancedag.test.ts",
-    why: "defect §23. Removing BOTH the unwind and the memo restores the exact shipped bug: one seen-set accumulating across siblings, so an all-SYSTEM diamond resolved to the top of the lattice. It failed closed, so this mutation cannot leak - it makes the engine refuse ordinary clean work, which is how a control gets switched off",
+    tests: "packages/core/test/provenancedag.test.ts packages/conformance/test/adversary.test.ts",
+    why: "defect §23. Named alongside the property search on purpose: the hand-written diamond tests pin the shape somebody thought of, and the search finds it in the hundreds without being told what to look for. Removing BOTH the unwind and the memo restores the exact shipped bug: one seen-set accumulating across siblings, so an all-SYSTEM diamond resolved to the top of the lattice. It failed closed, so this mutation cannot leak - it makes the engine refuse ordinary clean work, which is how a control gets switched off",
   },
   {
     id: "decide-is-total",
     claim: "decide() answers every input, including a malformed one, and never throws",
     package: "core",
     file: "packages/core/src/policy.ts",
-    find: `function structuralFault(input: DecisionInput): string | undefined {`,
-    replace: `function structuralFault(input: DecisionInput): string | undefined {
-  if (input !== input || true) return undefined;`,
-    tests: "packages/core/test/total.test.ts",
-    why: "defect §24. The engine claimed in a source comment that it never throws, and nine of sixteen malformed shapes threw. The claim mattered: a caller whose policy engine crashes writes a try/catch, and that catch block is the bypass",
+    // NEUTRALISED AT THE CALL SITE, not inside the function. The original inserted an early
+    // return at the top of `structuralFault`, and the §32 receipts loop added below it made
+    // TypeScript widen `input.receipts` in the now-unreachable code - so the mutation stopped
+    // COMPILING and the audit reported `caught (build)` while never running a single test,
+    // under a summary line that says every fix here has a test that can fail. A mutation that
+    // cannot compile proves nothing. See DEFECTS_FOUND.md §33.
+    find: `  const fault = structuralFault(input);`,
+    replace: `  const fault: string | undefined = undefined;
+  void structuralFault;`,
+    tests: "packages/core/test/total.test.ts packages/conformance/test/malformed.test.ts",
+    why: "defect §24. The property search was cited for this and could not reach it - its generator only emits well-formed inputs - which is §31. `malformed.test.ts` reaches it, 3,376 findings at 8k iterations. The engine claimed in a source comment that it never throws, and nine of sixteen malformed shapes threw. The claim mattered: a caller whose policy engine crashes writes a try/catch, and that catch block is the bypass",
   },
   {
     id: "unknown-role-fails-closed",
@@ -174,8 +180,29 @@ import {`,
     file: "packages/core/src/policy.ts",
     find: `  if (!KNOWN_ROLES.has(role)) return "CLEAN";`,
     replace: `  if (!KNOWN_ROLES.has(role) && KNOWN_ROLES.size < 0) return "CLEAN";`,
-    tests: "packages/core/test/total.test.ts",
-    why: "defect §25, and the only one of the three that could ALLOW something. ceilingFor asked whether a role was in the STEERING set; a misspelling is not, so it fell through to defaultCeiling and a WEB-derived recipient on email_send became an ALLOW purely by mislabelling the argument",
+    tests: "packages/core/test/total.test.ts packages/conformance/test/adversary.test.ts",
+    why: "defect §25, now genuinely reached by the property search: the ceiling is derived by `oracleCeiling` rather than by importing `ceilingFor`, so a bug inside that function no longer moves both sides. 2,564 findings at 8k iterations, where the first version found zero. and the only one of the three that could ALLOW something. ceilingFor asked whether a role was in the STEERING set; a misspelling is not, so it fell through to defaultCeiling and a WEB-derived recipient on email_send became an ALLOW purely by mislabelling the argument",
+  },
+  {
+    id: "coercion-is-a-tripwire",
+    claim: "coercing a Tainted throws rather than silently producing the string [object Object]",
+    package: "core",
+    file: "packages/core/src/taint.ts",
+    find: `    [Symbol.toPrimitive]: (hint: string): never => {`,
+    replace: `    [Symbol.toPrimitive]: (hint: string): never => {
+      if (hint !== "never-a-real-hint") return "[object Object]" as unknown as never;`,
+    tests: "packages/core/test/taint.test.ts",
+    why: "not a security fix, and recorded as one anyway. Interpolating a tainted value never leaked it - it produced [object Object] - so this closes the WRONG FAILURE rather than a hole: a developer got a plausible string and no signal, and found out much later. The tripwire does not make the label survive a coercion, because a coercion returns a primitive and a primitive cannot carry one",
+  },
+  {
+    id: "receipt-elements-validated",
+    claim: "a receipts array whose ELEMENTS are not objects is denied rather than dereferenced",
+    package: "core",
+    file: "packages/core/src/policy.ts",
+    find: `      if (typeof receipt !== "object" || receipt === null) {`,
+    replace: `      if (typeof receipt !== "object" || receipt === null ? false : false) {`,
+    tests: "packages/conformance/test/malformed.test.ts",
+    why: "defect §32, and the reason the malformed search was worth building. The structural gate added for §24 checked `sources` and `args` element by element and stopped at `Array.isArray` for receipts, so `receipts: [null]` reached `coverFor` and threw on `argPath`. A gate written to make the engine total that was itself not total, found on the first run of the search that could see it",
   },
 ];
 

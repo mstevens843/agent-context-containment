@@ -869,7 +869,7 @@ exists, or a package script — and every entry was re-anchored.
 
 ### The 30 unguarded branches
 
-`scripts/audit-mutations.mjs` reports 11/11 caught. That is 11 branches somebody thought to list. A
+`scripts/audit-mutations.mjs` reports 13/13 caught. That is 13 branches somebody thought to list. A
 sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
 no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
 in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
@@ -1394,3 +1394,382 @@ Turning the check on found a second, unrelated error that had been sitting in `w
 `Declassification<string>` while `amount` is a `Declassification<number>`. The demonstration of
 correlated-parameter receipts — the point of that example — was passing an argument its own signature
 rejected. It is now typed as `ReceiptEvidence`, which is what `decide` actually takes.
+
+## 28. The import stopped at the number of user rows, and the doc called that mechanical
+
+Not a defect in the engine. A defect in how much evidence was being left on the floor, and in one
+sentence that described the leaving as something it was not.
+
+`corpus/imported/source/` has committed, pinned upstream fixtures: 30 direct-harm attacker rows, 32
+data-stealing attacker rows, and 17 user rows. Seventeen cases were built from each attacker file,
+paired index to index with the user rows. Thirteen and fifteen upstream rows sat unused **in the
+repository**, already committed, already licensed, already byte-checkable.
+
+The import script's own prose said selection was *"mechanical - every pairable row in the pinned
+fixture - so it cannot have been chosen to flatter the engine."* The anti-cherry-picking half of that
+was true. "Every pairable row" was not: pairing was capped by the shorter list, and nothing said so.
+
+### Why this was the item worth doing
+
+The standing criticism of this corpus is circularity — most of it is written by the person whose
+engine it grades. Writing more cases does not answer that; it is self-authored evidence with extra
+steps. Importing content nobody here wrote is the only move that changes the ratio, and the material
+was already sitting in the tree.
+
+InjecAgent evaluates the full cartesian product of attacker and user cases, so pairing attacker row
+`n` with user row `((n - 1) mod 17) + 1` is a subset of upstream's own design rather than a new idea.
+Imported cases went from 34 to 62; the corpus from 102 to 130. The whole v1.0.1 arc is 98 to 130:
+the four provenance-DAG cases in section 23 took it to 102 first, and those are the author's. Only
+this step added content nobody here wrote.
+
+**The grading did not become more mine.** `mapping.test.ts` requires a capability to be a pure
+function of upstream's attack type — if two cases sharing a type land on different capabilities, the
+mapping has stopped being a rule and become a judgement that can be tuned. Every newly imported row
+carries a type that was already mapped, so the new entries apply an existing audited rule rather than
+inventing grades. The per-type rule is read off the existing entries at generation time rather than
+retyped, so it cannot drift from them.
+
+### What moved, and the one-line reason
+
+`Permitted when the tool is UNDERSTATED` went from **9/17 to 21/30** on direct harm and **17/17 to
+32/32** on data stealing. The test that pins it says, in its own comment, to explain a move rather
+than re-pin it. The explanation is a fact about the policy table, not about the corpus:
+
+`read_only_tool` is the only capability among the recorded understated peers that ALLOWS a
+`TOOL_OUTPUT` value in a `sink_identity`. `transaction_prepare` answers `NEEDS_REVIEW`, which is
+still a refusal. So a row is exposed exactly when its understated peer is `read_only_tool`:
+
+| attack type | capability | understated as | rows | exposed |
+|---|---|---|---|---|
+| Physical Harm | `account_modify` | `read_only_tool` | 10 | yes |
+| Data Security Harm | `web_fetch` | `read_only_tool` | 11 | yes |
+| Financial Harm | `payment` | `transaction_prepare` | 9 | no |
+
+10 + 11 = 21. The old 9 was the same arithmetic over 4 and 5. **The ratio rose because the rows that
+arrived were mostly the two exposed types, not because the hole got deeper.**
+
+### And a checker that was about to start measuring nothing
+
+`verify-numbers.mjs` pinned these facts with the denominator written as a literal:
+
+```js
+patterns: [/\b(\d+)[*\s]*(?:of|\/)[*\s]*17[*\s]+direct-harm/gi]
+```
+
+Once the split grew past seventeen rows, that pattern matched no current-state sentence in any
+document. It would have gone on matching exactly one thing — the **historical quotation** in §18
+recording a sentence an older checker had missed — and reported that as the stale one, while six live
+statements carrying `9/17` and `17/17` quietly stopped being checked at all.
+
+A fact whose pattern silently stops matching is a fact nobody is checking. That is §16 verbatim, in a
+script written after §16. The denominators are now computed from the same report the numerators come
+from, so they cannot rot apart.
+
+## 29. "There is no membrane in JavaScript" was true, and hid something that was available
+
+The sentence appears in five documents and it is correct. It is also the kind of correct that stops
+a question being asked, and the question had an answer.
+
+A membrane needs taint to PROPAGATE. `a + b` returns a primitive, a primitive cannot carry a label,
+and no amount of cleverness changes that: the propagation half is not merely open but unclosable in
+this language. That is what the sentence says and it stands.
+
+But **coercion is interceptable even when propagation is not.** `Symbol.toPrimitive` fires for a
+template literal, for `String(x)`, and for `x + ""`. Those are the three ways a label actually gets
+lost by accident, and until now all three did this:
+
+```js
+`${tainted("secret@attacker.tld", "WEB")}`   // -> "[object Object]"
+```
+
+Silently. (An explicit `.toString()` did the same and was missed at the time; section 31.) **Not a
+security defect** - the value never leaked, and the wrapper keeps `value` closed
+over rather than as an own property, so `JSON.stringify` emits the label and never the payload. It is
+the wrong FAILURE. A developer interpolating an untrusted value into a prompt or a URL got a
+plausible-looking string and no signal at all, and found out much later, somewhere else.
+
+Coercion now throws and names the three sanctioned exits. `toJSON` is deliberately left alone,
+because logging a `Tainted` is how somebody debugs one and that path already cannot leak.
+
+### What it is not
+
+A **tripwire**, not a membrane. It does nothing about `map(f)`, which still hands `f` the raw value.
+It does nothing about `unsafeUnwrap`. It does nothing about a value that was never wrapped. And it
+cannot make a label survive the coercion it interrupts - a test asserts exactly that, so nobody reads
+the change as more than it is.
+
+The documents now say both halves: propagation is impossible, interception was available, and the
+difference between them is the difference between a guarantee and a smoke alarm.
+
+## 30. The release-prep review found the §18 defect a third time, in four more places
+
+This section exists because the finding is not "some numbers were stale". It is that **the same
+defect keeps recurring in the same shape**, and the review that found it was a human asking for one.
+
+§18 recorded a document publishing `6/6` and `4/6` three versions after they became `17/17` and
+`9/17`. §28 recorded a pattern whose denominator was a literal, so it silently stopped matching. A
+release-prep pass over this work found four more, all unregistered and therefore all invisible:
+
+| where | said | actual |
+|---|---|---|
+| `STATUS.md` history row, current column | 102 corpus cases | 130 |
+| `STATUS.md` "Corpus provenance — where it actually stands" | 6 imported, 53 mine | 62 imported, 59 mine |
+| `STATUS.md` peer/understated prose, and "Known-open" | `6/6`, `4/6` | 30/30 and 32/32, 21/30 and 32/32 |
+| `docs/LIMITATIONS.md` row 13 | `4 of 6` | 21 of 30 and 32 of 32 |
+| `RELEASE_CHECKLIST.md` ×2, `STATUS.md` history row | `34/34` rebuild | 62/62 |
+
+The provenance one is the most pointed: that section's own opening paragraph says it exists because
+*"a stale status line that understates the work is the same defect as one that overstates it — both
+are claims nobody re-checked."* It was, itself, four releases stale.
+
+### Why the guard kept missing them
+
+Two mechanical reasons, both now fixed, and both the same underlying mistake as §28:
+
+1. **Patterns that do not reach into tables.** `corpus cases` matched two prose phrasings and no
+   table cell, so the history row's current-state column was never checked. Same for `imports rebuilt
+   from committed source`.
+2. **Patterns that demand a plain space.** `\b(\d+)/\d+\s+rebuild byte-identically` cannot match
+   `**62/62** rebuild byte-identically`, because markdown emphasis sits between the digits and the
+   noun. This is the identical failure the mis-declaration patterns had already been widened for with
+   `[*\s]*` — the lesson was recorded in one place and not carried to the next.
+
+A second sweep, run as part of release prep rather than as part of the change, found five more - and
+two of them were in GENERATOR SOURCE, so regenerating the document propagated the stale value instead
+of correcting it:
+
+| where | said | actual |
+|---|---|---|
+| `scripts/report.mjs` prose, into `docs/REPORT.md` | `17 of 17` data-stealing | 32 of 32 |
+| `scripts/manifest-report.mjs` prose | `17 of 17` | 32 of 32 |
+| `docs/CAPABILITY_MANIFESTS.md` table | `9 of 17`, `17 of 17` | 21 of 30, 32 of 32 |
+| `docs/EVALS.md`, `SECURITY.md` | `4 of 6` | 21 of 30 and 32 of 32 |
+| `README.md` splits table and provenance line, `PUBLISHING.md` | a 98-case figure, `tuning` at 25, `imported` at 34, 55 `original` | 130, 29, 62, 59 |
+
+The README ones matter most: that splits table is the first thing a reader meets, it duplicates data
+the generated `corpus-splits` block already owns, and it was hand-typed and two releases behind.
+
+All of these are now registered facts with table-cell anchors, each proven to fire by setting the
+value wrong and watching the checker name the line. **The ratchet fell from 110 to 100**: ten
+statements that were being counted as unchecked noise are now checked.
+
+**This paragraph was itself wrong when first written, and section 31 records why.** It said "all of
+these are now fixed" after a sweep that had corrected ONE of four occurrences in `scripts/report.mjs`
+and none of the four in shipped library code.
+
+One new pattern had to be tightened twice on the way in. `\bThe corpus is\s+(\d+)` matched
+STATUS.md's quotation of an old line reading *"the corpus is 100% author-written"*, and the obvious
+guard - a negative lookahead for the percent sign - still matched, because the regex backtracked to
+`10` and found a digit rather than a `%` after it. It needs `(?![%\d])`. Recorded because a rule
+that fires on ordinary English gets suppressed, and a suppressed rule protects nothing.
+
+### The part that is not mechanical
+
+`report:mapping` prints a robustness figure and a mis-declaration figure, and both read `N/30
+direct-harm`. When the robustness statistic was written into prose, the mis-declaration pattern
+matched it and reported the wrong number as stale. Registering a fact makes a sentence checkable; it
+also makes NEIGHBOURING sentences of the same shape ambiguous, and there is no general fix for that
+beyond writing the two statistics so they do not collide. That is a cost of this approach and it is
+worth naming rather than discovering again.
+
+## 31. The release-prep audit found three overstatements in the release-prep work itself
+
+Six adversarial readers were pointed at the six limitations this project names, and told to catch it
+overstating rather than to confirm it. Four came back SOFTENED. The findings below are all in work
+done during the v1.0.1 pass, by the same hand that wrote sections 23 to 30 about this exact failure.
+
+### The property search claimed to catch three defects and catches one
+
+`adversary.ts` said, in its own header: *"THREE PROPERTIES, and each one has a defect behind it"*,
+naming §24 under `never_throws` and §25 under `under_block`. Measured, by reintroducing each mutation
+from `scripts/audit-mutations.mjs` and re-running the search at 8,000 iterations:
+
+| mutation | findings |
+|---|---|
+| `dag-path-scoped` (§23) | **1,386** |
+| `decide-is-total` (§24) | **0** |
+| `unknown-role-fails-closed` (§25) | **0** |
+
+Neither zero is bad luck.
+
+- **§24 is out of reach by generation.** `buildGraph` only emits well-formed `DecisionInput`s. The
+  malformed shapes that defect was about — `null`, a missing `action`, a non-array `sources`, a chain
+  ten thousand deep — are never produced. The `chain` shape caps at six nodes.
+- **§25 is out of reach BY CONSTRUCTION, and this is the more interesting one.** The `under_block`
+  check reads the ceiling with `ceilingFor` **imported from core** — the same function `decide` uses.
+  A bug inside `ceilingFor` therefore moves both sides of the comparison together, and `taintAtMost`
+  can never disagree with itself. An oracle that shares the function under test cannot test it.
+
+`scripts/audit-mutations.mjs` had it right all along: it names `adversary.test.ts` only under
+`dag-path-scoped`. **The source comment claimed more than the mutation registry did**, which is the
+§24 shape exactly — a false claim in a source comment — inside the file written to catch that shape.
+
+The header now states what was measured, including why two of the three properties are dead.
+
+### "A second implementation of the same specification" was too strong
+
+The same header called the oracle *"a second implementation of the same specification"*. It is a
+second implementation of the **walk**. It imports `taintOf` and `joinTaint` from the same module the
+engine uses, so a wrong entry in `PROVENANCE_TAINT` or `TAINT_RANK` is invisible to the search. The
+markdown got this right everywhere — `LIMITATIONS.md`, `STATUS.md`, `claims.json` and the changeset
+all say *taint walk* — and only the source comment upgraded it. Corrected there.
+
+### The tripwire had a fourth path, and four documents said it did not
+
+`t.toString()` did **not** throw. It returned `"[object Object]"`, silently — the exact failure §29
+was written to remove — because an explicit `.toString()` never invokes ToPrimitive and so never
+reaches `Symbol.toPrimitive`. It is the call shape every logging helper uses.
+
+§29 enumerated *"the three ways a label actually gets lost by accident"*. There were four.
+`STATUS.md`, `TRUST_BOUNDARIES.md` and `SECURITY.md` each said coercion now throws, unqualified.
+
+`toString` is now overridden and tested. **`Object.prototype.toString.call(t)` still returns
+`"[object Object]"` and cannot be intercepted** — a borrowed method is not a method call on the
+wrapper. That gap is now named in the code, the limitation table and the trust boundaries, rather
+than left for the next audit.
+
+### And an assertion that could not fail
+
+The test §29 cited as proving the label does not survive a coercion asserted
+`Object.hasOwn(Object(escaped), "label") === false`. Boxing any string yields a wrapper with no own
+`label` property under every implementation, so **the assertion cannot fail**. `claims.json` said "one
+of the tests asserts that directly" and §29 said "a test asserts exactly that"; both overstated a
+line that was documentation wearing an `expect`.
+
+It now demonstrates the laundering instead of gesturing at it: unwrap the hostile value, interpolate
+it, and relabel the result `CLEAN` with no error — which is what "the label does not survive" means
+operationally.
+
+### The pattern worth naming
+
+Sections 15 to 30 are all one failure: a check that looked like evidence and was not. Every finding
+here is the same failure committed **while writing the checks for it**, and none of them was reachable
+by any gate — the mutation audit, the prose guard, the claim registry and the number checker were all
+green throughout. What found them was six readers told to disprove rather than to verify.
+
+`audit:release` already ends by saying the deterministic half cannot do this and to *"get somebody to
+refute it."* That line is the most load-bearing in the repository, and this section is what happens
+the first time anyone takes it seriously.
+
+## 32. The gate written to make the engine total was not itself total
+
+Section 24 added `structuralFault` so `decide` would answer a malformed request instead of throwing.
+It validated `action`, it walked `action.args` element by element, it walked `sources` element by
+element — and for `receipts` it checked `Array.isArray` and stopped.
+
+```js
+decide({ ...valid, receipts: [null] })
+// TypeError: Cannot read properties of null (reading 'argPath')
+```
+
+`coverFor` dereferences each receipt, so a `null` element reached it and threw. `[undefined]` did the
+same. `[42]`, `[{}]` and `[[]]` happened to survive, which is what makes the shape easy to miss: the
+array is the right type and three of five junk elements are harmless.
+
+The claim in `docs/claims.json` — *"`decide()` returns a verdict for every input, including a
+malformed one, and never throws"* — was graded PROVEN with a mutation behind it, and was false for
+three lines of input.
+
+### What found it, and why nothing else could
+
+The **malformed-input search**, on its first run, in the same pass that built it. Nothing already in
+the repository could have:
+
+- `total.test.ts` enumerates malformed shapes by hand, and its list came from the same head that
+  wrote the gate. It contains `receipts: "r"` — a non-array — and no case with a bad *element*. The
+  test and the gate share an author and therefore share a blind spot, which is the oldest complaint
+  in this file.
+- the graph property search only emits well-formed inputs, so it was never going to look.
+- the mutation audit checks that a recorded fix has a test. It cannot invent a branch nobody recorded.
+
+`receipts` is now validated element by element, and the search that found this is a CI gate.
+
+### The one that was not a defect, recorded because it nearly became one
+
+The same first run reported **793 further findings**, and every one of them was wrong. The property
+said "nothing this generator emits may be ALLOWed", and the generator emits intact requests as well
+as broken ones — a twelve-thousand-node chain of `SYSTEM` sources is perfectly well formed and ALLOW
+is the correct answer to it.
+
+Believing that report would have meant "fixing" an engine that was right. The property now asks an
+**independent validity oracle** written in the search module, and only inputs that oracle calls
+broken carry it. That oracle is also what checks receipt elements — which is precisely why it
+disagreed with the engine and why section 32 is a real finding while the other 793 were noise.
+
+A property search is only as good as its property, and a property that fires on correct behaviour is
+worse than no search: it spends the credibility that makes the real finding believable.
+
+## 33. A mutation that stopped compiling, and four claims the refutation pass measured as false
+
+Five readers were told to disprove the work added in the previous pass rather than confirm it. All
+five came back OVERSTATED. Two findings are defects in machinery; the rest are sentences that claimed
+more than the thing they described.
+
+### The mutation audit reported a pass it never ran
+
+Section 32 added a loop over `input.receipts` inside `structuralFault`. The recorded
+`decide-is-total` mutation inserts an early `return` at the top of that function — and TypeScript,
+seeing an unconditional return above the new loop, widens `input.receipts` back to possibly-undefined
+in the now-unreachable code below. The mutation **stopped compiling**.
+
+`audit-mutations.mjs` treats a build failure as `caught (build)`, skips the test run, and closes with:
+
+> 13/13 mutations caught. Every fix listed here has a test that can fail.
+
+Which was false for that entry: no test ran at all. A fix made in one section silently disarmed the
+control for another, and the summary line reported the disarmed control as a pass. It is neutralised
+at the call site now, which compiles and fails 26 tests.
+
+**The general shape is worth more than the instance.** A mutation is source text. Source text can
+stop matching, and it can stop compiling, and `caught (build)` is indistinguishable from a real catch
+in the summary. §28 was a regex that stopped matching; this is the same failure one layer over.
+
+### The under-block property is narrower than its own comment said
+
+The comment claimed the ceiling check took *"no part ... from the engine"*. Measured, three things
+do:
+
+| shared | consequence, measured |
+|---|---|
+| the lattice | `TAINT_RANK` for UNTRUSTED_EXTERNAL set to 0, or `PROVENANCE_TAINT.WEB` set to CLEAN, each turns a WEB-derived recipient on `email_send` into an ALLOW — and the search reports **zero** |
+| the table's DATA | `oracleCeiling` restates the RULE but reads `roleCeilings` off the same row the engine reads. Widening a ceiling in the shipped table reproduces the section 25 attack exactly, and the search reports **zero** |
+| the ALLOW gate | the property fires only on `decision === "ALLOW"`, so it is blind on all four `requiresConfirmation` rows — `payment`, `wallet_sign`, `account_modify`, `transaction_broadcast`, the highest-stakes rows in the table |
+
+What it does catch is a bug in the ceiling **rule**, which is what section 25 was. That is real: the
+same oracle also catches `fail-closed-ceiling`, dropping `magnitude` from the steering set, and
+removing the USER_CONTROLLED clamp. It is simply less than the comment claimed, and the difference is
+now written where the code is.
+
+### The test file does not defend the thing the file is about
+
+`adversary.test.ts` passes with the section 31 fix reverted. Its negative control fires on the
+loosened-TABLE difference, which the old `ceilingFor`-based oracle sees just as well. What actually
+catches a revert is the `unknown-role-fails-closed` mutation entry, which names the file and requires
+it to go red. The guard exists; it lives one script away from the file making the claim, and nothing
+said so.
+
+### Three sentences that were wrong
+
+- **`LIMITATIONS.md` row 14: "Both searches pass `receipts: []`."** False. The malformed search
+  passes junk receipts in about a fifth of its calls — including `[null]`, which is the input section
+  32 is *about*. The sentence contradicted section 32 two rows away in the same file.
+- **Row 14's coverage list.** Deleting the branch for each named shape: *a wrong role* is caught only
+  by `unguarded.test.ts`, which the row does not name, and *reuse inside one action* is caught by
+  **nothing** — the whole suite stays green without it. Nine of eleven shapes were attributed
+  correctly; two were not.
+- **`claims.json` `coercion-is-a-tripwire`.** Section 31 recorded *"one of the tests asserts that
+  directly"* as an overstatement, and the new registry entry written in the same pass reproduced the
+  sentence verbatim. The test passes with the tripwire removed.
+
+### What survived
+
+The load-bearing measurements reproduced exactly: 1,386 findings for section 23, 2,564 for section
+25, 3,376 for section 24, and the section 32 mutation failing three assertions for the intended
+reason. The disclosures in `adversary-report.mjs` were checked and are accurate rather than hedging —
+the search really is blind exactly where it says it is. Determinism holds: two runs at one seed give
+byte-identical finding lists.
+
+**The pattern, said once more.** Sections 31 and 33 are the same event twice: a pass wrote checks,
+believed them, and a reader told to refute found the gaps in an afternoon. `audit:release` ends by
+saying the deterministic half cannot do this and to *"get somebody to refute it."* Twice now that has
+been the only thing that worked.

@@ -208,7 +208,7 @@ export function semanticRisks(
       push(
         t.name,
         "SENDS_BUT_NOT_FULL_EGRESS",
-        `named like it moves data outward, and bound to "${t.capability}" whose egress is "${row.egress}". This is the shape that lets 17 of 17 imported data-stealing attacks through: the attack IS the send, so a row that says nothing leaves has nothing to refuse`,
+        `named like it moves data outward, and bound to "${t.capability}" whose egress is "${row.egress}". This is the shape that lets 32 of 32 imported data-stealing attacks through: the attack IS the send, so a row that says nothing leaves has nothing to refuse`,
         "where the tool's output actually goes - a network call, a webhook, a message bus",
       );
     }

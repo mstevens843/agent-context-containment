@@ -990,8 +990,18 @@ function structuralFault(input: DecisionInput): string | undefined {
     }
   }
 
-  if (input.receipts !== undefined && !Array.isArray(input.receipts)) {
-    return "`receipts` is not an array";
+  if (input.receipts !== undefined) {
+    if (!Array.isArray(input.receipts)) return "`receipts` is not an array";
+    // THE ELEMENTS, NOT JUST THE ARRAY. The first version of this gate checked `sources` and
+    // `action.args` element by element and stopped at `Array.isArray` for receipts, so
+    // `receipts: [null]` walked straight past it and `coverFor` threw reading `argPath` off it.
+    // A gate written to make the engine total, that was itself not total. Found by the malformed
+    // input search rather than by anything already here. See DEFECTS_FOUND.md section 32.
+    for (const receipt of input.receipts) {
+      if (typeof receipt !== "object" || receipt === null) {
+        return "an entry of `receipts` is not an object";
+      }
+    }
   }
   return undefined;
 }

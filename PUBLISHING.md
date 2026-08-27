@@ -6,7 +6,7 @@ release would have to satisfy, written down while the reasoning is fresh.
 ## Before a first release
 
 - [x] **Decide whether the version number is honest. SETTLED: `0.1.0`.** The five packages are at
-      `0.1.0`; the private root manifest stays `0.0.0` and is never published. The corpus is 98
+      `0.1.0`; the private root manifest stays `0.0.0` and is never published. The corpus is 130
       hand-written and imported cases, the freeze is unavailable, and there is no model in the loop.
       `1.0.0` would be a claim the evidence does not support — it promises API stability to strangers
       on the strength of a mechanism, not a track record.

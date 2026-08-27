@@ -59,6 +59,16 @@ export interface Tainted<T> {
    * another, which is the bug this class of library exists to prevent.
    */
   readonly unwrap: (d: Declassification<T>, forCapability: Capability) => T;
+  /**
+   * Refuses to coerce. A TRIPWIRE, not a membrane - see the implementation for the distinction.
+   *
+   * Typed as `never` so a caller who interpolates a tainted value is told at compile time as well as
+   * at runtime. The runtime half is the one that matters, because the compile-time half is exactly
+   * what a JavaScript consumer of the published package does not have.
+   */
+  /** Refuses too. An explicit toString() bypasses ToPrimitive entirely; see the implementation. */
+  readonly toString: () => never;
+  readonly [Symbol.toPrimitive]: (hint: string) => never;
   /** Escape hatch. Always returns a warning string alongside; see docs/LIMITATIONS.md. */
   readonly unsafeUnwrap: (justification: string) => { readonly value: T; readonly warning: string };
 }
@@ -124,6 +134,53 @@ function wrap<T>(value: T, label: TaintLabel): Tainted<T> {
         `POLICY BYPASS: unsafeUnwrap on a ${label.taint} value. Justification: ` +
         `${JSON.stringify(justification)}. Recorded so an audit can find it. See LIMITATIONS.md.`,
     }),
+    /**
+     * A TRIPWIRE, not a membrane, and the difference is worth being exact about.
+     *
+     * There is still no membrane in JavaScript, and there cannot be: `+` returns a primitive, and a
+     * primitive cannot carry a label, so nothing can propagate taint into the RESULT of a coercion.
+     * That half of the limitation is unchanged and unchangeable. What IS interceptable is the
+     * coercion itself - `Symbol.toPrimitive` fires for a template literal, for `String(x)`, and for
+     * `x + ""`.
+     *
+     * Before this existed, all three silently produced the string "[object Object]". That never
+     * leaked the VALUE, which is why it was not a security defect - but it is the wrong failure. A
+     * developer interpolating an untrusted value into a prompt or a URL got a plausible-looking
+     * string and no signal at all, and the mistake surfaces much later as a bug with no obvious
+     * cause. Failing at the moment of coercion turns a silent wrong answer into a stack trace
+     * pointing at the line that did it.
+     *
+     * `toJSON` is deliberately NOT overridden. `JSON.stringify` on a `Tainted` already emits the
+     * label and never the value, because `value` is closed over rather than an own property, so
+     * logging one is safe and useful. Breaking that would cost debuggability and buy nothing.
+     */
+    /**
+     * `toString` is a SEPARATE hole and was one until the release-prep audit found it.
+     *
+     * An explicit `t.toString()` never goes through ToPrimitive, so `Symbol.toPrimitive` above does
+     * not see it, and it silently returned "[object Object]" - the exact failure the tripwire was
+     * built to remove, on a call shape that appears in every logging helper anyone writes. The four
+     * documents that said "coercion now throws instead of silently stringifying" were wrong about
+     * this one path. See DEFECTS_FOUND.md section 31.
+     *
+     * `Object.prototype.toString.call(t)` still returns "[object Object]" and cannot be intercepted.
+     * That is a real remaining gap and it is named rather than papered over.
+     */
+    toString: (): never => {
+      throw new ContainmentError(
+        "undeclassified_unwrap",
+        `a ${label.taint} value had toString() called on it. Same reason as a coercion: the result is a plain string and cannot carry a label. Use unwrap() with a declassification, map() to transform inside the wrapper, or unsafeUnwrap() with a written justification.`,
+      );
+    },
+    [Symbol.toPrimitive]: (hint: string): never => {
+      throw new ContainmentError(
+        "undeclassified_unwrap",
+        `a ${label.taint} value was coerced to a primitive (hint: ${hint}). Interpolating a
+tainted value into a string is how a label gets lost: the result is a plain primitive and cannot
+carry one. Use unwrap() with a declassification, map() to transform inside the wrapper, or
+unsafeUnwrap() with a written justification to bypass this deliberately.`,
+      );
+    },
   };
 }
 

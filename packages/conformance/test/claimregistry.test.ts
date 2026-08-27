@@ -185,6 +185,7 @@ describe("claim registry", () => {
       "pnpm audit:docs",
       "pnpm audit:claims",
       "pnpm audit:mutations",
+      "pnpm adversary",
       "pnpm audit:release",
     ]) {
       expect(

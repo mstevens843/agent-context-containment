@@ -19,7 +19,7 @@
 //   <!-- /GENERATED -->
 //
 // WHAT IS DELIBERATELY NOT GENERATED. A number inside a sentence - "declaring a send tool as
-// read-only lets 17 of 17 imported attacks through" - reads as prose and would be wrecked by a block
+// read-only lets 32 of 32 imported attacks through" - reads as prose and would be wrecked by a block
 // marker around it. Those are protected differently: `claims.test.ts` requires each to name the
 // script that produces it, and `pnpm audit:claims` re-runs that script and compares. Blocks are for
 // TABLES; the claim registry is for SENTENCES. Both are needed because neither covers the other.

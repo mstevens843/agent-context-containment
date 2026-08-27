@@ -12,8 +12,8 @@ a tool filed as less capable than it is:
 
 | split | attacks that go straight through |
 |---|---|
-| InjecAgent direct harm | **9 of 17** |
-| InjecAgent data stealing | **17 of 17** |
+| InjecAgent direct harm | **21 of 30** |
+| InjecAgent data stealing | **32 of 32** |
 
 The second is not a corner case, it is the whole split, and necessarily so: those attacks *are* the
 send. Declare the send harmless and there is nothing left for containment to refuse — not because the
@@ -33,7 +33,7 @@ engine failed, but because it was told the action does nothing.
 |---|---|---|
 | read-only while it has side effects | corroborated | `effect: "none"` contradicts nothing internally |
 | steering role labelled `payload` | corroborated | needs the tool's schema or its semantics |
-| full egress understated as read-only | corroborated | same shape, and the 17/17 above |
+| full egress understated as read-only | corroborated | same shape, and the 32/32 above |
 | confirmation omitted on an irreversible row | **structural** | contradicts the declared effect |
 | tuple missing for paired dangerous args | **structural** | a property of the row's own ceilings |
 

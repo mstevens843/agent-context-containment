@@ -6,9 +6,10 @@
 |---|---|---|---|---|
 | `holdout` | 16 | yes (v0) | before the engine — **not provable, see below** | the instrument. Frozen by manifest, not by a git object. |
 | `holdout_v2` | 6 | yes | after the engine | a regression split closing v0's laundering gap. **Not a blind instrument** — see below. |
-| `tuning` | 23 | no | after the engine | freely editable. Agreement here is close to tautological and is reported anyway. |
-| `derived` | 9 | no | shapes by other people | least circular evidence in the repo, and smallest. See `DERIVED_CORPUS.md`. |
+| `tuning` | 29 | no | after the engine | freely editable. Agreement here is close to tautological and is reported anyway. |
+| `derived` | 9 | no | shapes by other people | the least circular SHAPES: attacks other people designed for other systems, restated in my words. Smallest split. See `DERIVED_CORPUS.md`. |
 | `adaptive` | 8 | no | evasions I chose to write | which means evasions I already knew how to handle. Honest about that. |
+| `imported` | 62 | no | **not authored here at all** | upstream's own strings, byte for byte, rebuilt from committed source rows by `pnpm import:check`. The grading is mine and is audited separately in `MAPPING.json`. The least circular CONTENT in the repo, and the largest hand-scale split. |
 | `generated` | 648 | derived from the two above | mechanical | every transform x every base case, at one and two hops. **Never pooled with a hand-authored split** — 648 variants beside 16 frozen cases would be a worse number than either. |
 
 **They are reported side by side and never summed.** The splits are not samples from one population:
@@ -366,12 +367,13 @@ structural by construction.
 
 Two more, added because v0.6 measured them rather than leaving them as prose:
 
-- **The capability declaration is trusted input, and it is worth 4 of 6 imported cases.** Declare an
+- **The capability declaration is trusted input, and it is worth 21 of 30 direct-harm and 32 of 32
+  data-stealing imported cases.** Declare an
   exfiltration tool as `read_only_tool` and containment lets it through, because it enforces flow
   *given* the declaration and cannot know the declaration is wrong. Not scored as a containment
   failure — it is out of contract — but reported, because it is the first thing to audit in a real
   deployment.
-- **The grading of the imported split is mine even though the strings are not.** `6/6` hold under
-  every peer capability mapping a reviewer could defend, which is the condition under which those
+- **The grading of the imported split is mine even though the strings are not.** `30/30` direct-harm
+  and `32/32` data-stealing hold under every peer capability mapping a reviewer could defend, which is the condition under which those
   cases are evidence about the attacks rather than about my table. That is a measured claim now, not
   an assurance.

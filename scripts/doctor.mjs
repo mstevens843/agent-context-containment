@@ -144,7 +144,7 @@ console.log(rule);
 console.log("  WHAT THIS CANNOT SEE");
 console.log(rule);
 console.log("    - whether your declared provenance matches where the bytes came from");
-console.log("    - whether a tool does what its capability row says (9/17 and 17/17, measured)");
+console.log("    - whether a tool does what its capability row says (21/30 and 32/32, measured)");
 console.log("    - whether your hosts share one database");
 console.log("    - anything about a running system: this reads declarations, not processes");
 console.log("");

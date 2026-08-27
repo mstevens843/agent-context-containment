@@ -24,6 +24,16 @@ export const NOT_A_CLAIM = [
   [/\b[MPALDX]\d+\b/g, "mutation ids"],
   [/\b[A-Za-z_][\w-]*\d+\w*\b/g, "identifiers carrying a digit: acct-1, v0, SHA256, r-1"],
   [/^\s*\d+\.\s/g, "ordered-list markers and numbered headings"],
+  // A LEADING TABLE CELL THAT IS JUST AN INTEGER IS A ROW LABEL, and a row label is an index: it
+  // identifies the row, it is cited as "row 14", and it cannot go stale. Exactly the category above,
+  // in table form. Added when a new limitation row moved the ratchet by one - and added as a RULE
+  // rather than by raising the ceiling, because "row 12" is not a claim about anything and counting
+  // it as unchecked prose overstates the unchecked surface.
+  //
+  // Deliberately anchored and narrow: only a cell that is ENTIRELY an integer, only at the start of
+  // the line. `| 21 of 30 direct-harm |` is not a row label and is not exempted, which is what the
+  // "a real claim next to a noise shape is still reported" test in numbers.test.ts pins.
+  [/^\|\s*\d+\s*\|/g, "table row labels"],
   [/\b\d+\s*(?:ms|s|kb|mb|gb|bit|bits|byte|bytes)\b/gi, "units, not counts of things proven"],
   [
     /\b(?:left|passed|reported|showed|survived|returned|said|says|stated|was|were|had)\s+(?:\w+\s+){0,2}\d+\s*(?:of|\/)\s*\d+/gi,

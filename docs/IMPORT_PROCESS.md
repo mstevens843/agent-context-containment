@@ -93,8 +93,8 @@ input was not written by the person who wrote the defence.
 defended:
 
 ```
-ROBUST to peer mappings                   6/6
-Permitted when the tool is UNDERSTATED    4/6
+ROBUST to peer mappings                   30/30
+Permitted when the tool is UNDERSTATED    21/30
 ```
 
 The first says the outcome does not depend on which of several defensible capabilities I picked. The

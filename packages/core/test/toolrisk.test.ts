@@ -60,7 +60,7 @@ describe("semantic risk heuristics", () => {
   });
 
   it("catches an exfiltration tool bound to the read row", () => {
-    // The shape that lets 17 of 17 imported data-stealing attacks through.
+    // The shape that lets 32 of 32 imported data-stealing attacks through.
     const found = risks([
       {
         name: "gmail.sendMessage",

@@ -52,6 +52,7 @@ jobs:
       - run: pnpm audit:docs
       - run: pnpm audit:claims
       - run: pnpm audit:mutations
+      - run: pnpm adversary
       - run: pnpm audit:release
 
       # ---- what a stranger actually installs ------------------------------------------------------

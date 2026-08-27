@@ -23,11 +23,14 @@ person.
 **Out of scope**, and each of these is a documented limitation rather than a bug:
 
 - **A wrong capability declaration.** Containment enforces flow *given* the declaration. Declare an
-  exfiltration tool as `read_only_tool` and it will be permitted — that is measured at **4 of 6** on
-  the imported split (`pnpm report:mapping`) and is the first thing to audit in a deployment.
+  exfiltration tool as `read_only_tool` and it will be permitted — that is measured at **21 of 30**
+  direct-harm and **32 of 32** data-stealing on the imported split (`pnpm report:mapping`) and is the
+  first thing to audit in a deployment.
 - **A caller not threading `Tainted` through.** The taint is cooperative, not enforced. There is no
   membrane in JavaScript: `unsafeUnwrap` exists, `map(f)` hands `f` the raw value, and anywhere the
-  wrapper is not carried there is no taint at all.
+  wrapper is not carried there is no taint at all. Coercing a `Tainted`, or calling `toString()` on one,
+  throws rather than silently stringifying, which catches the common accidental paths but not
+  `Object.prototype.toString.call`; and none of it makes the label survive the coercion.
 - **Reaching past the guard.** `advanced.decide` is exported and is a deliberate bypass of the
   ledger and clock. It is namespaced so that using it is visible in a diff, not prevented.
 - **Model behaviour.** Nothing here constrains what a model says or plans. It constrains what a tool

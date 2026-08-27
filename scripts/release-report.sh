@@ -67,7 +67,7 @@ cat <<'NOTE'
     exists in this history. `frozenAtCommit` is null and stays there.
   - No policy here is proven optimal. Five profiles, TWO of them undominated - the arithmetic shows a
     tradeoff and cannot pick. See docs/POLICY_CHOICE.md.
-  - A capability declaration is trusted input. Declare a send tool as read-only and 17 of 17 imported
+  - A capability declaration is trusted input. Declare a send tool as read-only and 32 of 32 imported
     data-stealing attacks go through. Structural validation cannot see it.
   - Cross-host ledger safety is ADAPTER-PROVEN, and PROVEN against a real Postgres only when
     DATABASE_URL is set - a run without it reports that block as SKIPPED / NOT PROVEN, never green.

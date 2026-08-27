@@ -30,7 +30,7 @@ in this repository only about **internal consistency**: `validatePolicy` proves 
 contradict itself, which is not the same as being true.
 
 **The cost is measured, not estimated.** Declare a send tool as `read_only_tool` and, on the imported
-corpus, **9 of 17** direct-harm and **17 of 17** data-stealing attacks go straight through
+corpus, **21 of 30** direct-harm and **32 of 32** data-stealing attacks go straight through
 (`pnpm report:mapping`).
 
 ## Cooperative provenance vs hard sandboxing
@@ -40,6 +40,10 @@ The taint model is **cooperative**. There is no membrane in JavaScript:
 - `Tainted.map(f)` hands `f` the raw value, and `f` can capture it
 - `unsafeUnwrap` exists and is exported
 - anywhere the wrapper is not threaded through, there is no taint at all
+- coercing a `Tainted`, or calling `toString()` on one, THROWS rather than stringifying - a tripwire
+  on the accidental paths, though `Object.prototype.toString.call` still cannot be intercepted;
+  the result of a coercion is a primitive and cannot carry a label, so this catches the mistake
+  without making the label survive
 - `derivedFrom` is a second, independent check for exactly this reason — it catches a value laundered
   through a plain string — and it is also declared by the caller
 
@@ -91,7 +95,7 @@ false, and its negative control. `pnpm audit:claims` enforces that a PROVEN clai
 | you must | or else |
 |---|---|
 | declare provenance honestly, per source | the ceilings are calibrated for a lie |
-| bind each tool to the capability it actually has | measured at 17/17 on the data-stealing split |
+| bind each tool to the capability it actually has | measured at 32/32 on the data-stealing split |
 | thread `derivedFrom` through every transformation | one missing edge launders a hostile source |
 | show the human the **exact value**, not a description | the receipt ratifies something nobody saw |
 | use `createGuard`, not `advanced.decide` | you supply `now`/`spentReceipts` yourself, or omit them |
@@ -104,14 +108,14 @@ false, and its negative control. `pnpm audit:claims` enforces that a PROVEN clai
 
 Ordered by how much they would cost if you got them wrong.
 
-1. **A wrong capability declaration.** The largest hole, measured at 9/17 and 17/17. Structural
+1. **A wrong capability declaration.** The largest hole, measured at 21/30 and 32/32. Structural
    validation catches self-contradiction; naming advisories read names. Neither reaches a tool whose
    name is honest and whose behaviour is not.
 2. **Cooperative taint.** No membrane. Anywhere `Tainted` is not threaded, there is no taint.
 3. **Deployment topology.** Cross-host safety is adapter-proven and, with `DATABASE_URL`, proven
    against a real database. Whether *your* pods share one database is not checkable from here.
 4. **`staleAfterMs`.** No setting is free. Reclaiming too eagerly is the double-spend direction.
-5. **A corpus mostly written by the policy author.** 34 of 98 cases are upstream bytes; the rest are
+5. **A corpus mostly written by the policy author.** 62 of 130 cases are upstream bytes; the rest are
    mine, and all the grading is. `pnpm report:mapping` measures how much of the imported result rests
    on my capability choices.
 6. **The ordering proof is unavailable.** The v0 holdout was written before the engine and that was
