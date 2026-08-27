@@ -12,7 +12,7 @@ import {
   advanced,
   decide,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import { createGuard } from "../src/index.js";
 

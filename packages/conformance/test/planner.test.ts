@@ -17,14 +17,14 @@ import {
   type PlanShape,
   generatePlans,
   runPlans,
-} from "@agent-containment/conformance";
+} from "@agent-context-containment/conformance";
 import {
   ALL_CAPABILITIES,
   CAPABILITY_POLICY,
   type CapabilityPolicy,
   admitUserConfirmedValue,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 
 const scoreByShape = (policy?: CapabilityPolicy): Record<string, number> => {

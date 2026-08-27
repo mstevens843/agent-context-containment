@@ -10,7 +10,7 @@
 // was derived. The content is accepted and echoed and is NEVER read to decide anything - watching a
 // decision not change when you rewrite the text is the fastest way to understand the design.
 
-import { detect } from "@agent-containment/classifier";
+import { detect } from "@agent-context-containment/classifier";
 import {
   ALL_CAPABILITIES,
   ALL_PARAM_ROLES,
@@ -24,7 +24,7 @@ import {
   decide,
   sourceId,
   taintOf,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 const argv = process.argv.slice(2);
 const flag = (name: string): string | undefined => {

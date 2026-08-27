@@ -1,0 +1,86 @@
+# Publish to npm, manually, after the whole gate has passed in CI.
+#
+# NOT ON PUSH, AND NOT ON MERGE. A publish is a claim about quality made to strangers, and this
+# project's whole argument is that claims should be checkable by the person making them before anyone
+# else has to trust them. So it is `workflow_dispatch` only: a human presses it, having read the run.
+#
+# The gate runs HERE too rather than trusting an earlier green run. A release built from a commit
+# whose checks were green three commits ago is a release nobody checked.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run only (no packages are published)"
+        type: boolean
+        default: true
+
+jobs:
+  publish:
+    name: Verify, then publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - run: pnpm install --frozen-lockfile
+
+      # ---- the frozen instrument, before anything else ----------------------------------------
+      - name: Verify the holdout matches its manifest
+        run: shasum -a 256 -c corpus/holdout/MANIFEST.sha256
+
+      # ---- the ordinary build gate ---------------------------------------------------------------
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test
+
+      # ---- the claim gates -----------------------------------------------------------------------
+      # Everything built between v0.8 and v1.0 to stop this project overstating itself. A publish that
+      # skipped these would ship documents nobody checked. See DEFECTS_FOUND.md §19.
+      - run: pnpm blocks:check
+      - run: pnpm verify:numbers
+      - run: pnpm audit:docs
+      - run: pnpm audit:claims
+      - run: pnpm audit:mutations
+      - run: pnpm audit:release
+
+      # ---- what a stranger actually installs ------------------------------------------------------
+      # Packs the real tarballs with pnpm (npm pack would copy `workspace:*` in verbatim and produce
+      # something uninstallable), installs them offline, and checks containment still refuses an
+      # injected send in both CJS and ESM. See DEFECTS_FOUND.md §22.
+      - run: pnpm smoke:pack
+
+      # ---- publish ---------------------------------------------------------------------------------
+      # `pnpm publish`, never `npm publish`: only pnpm rewrites the `workspace:*` specifiers.
+      # NPM_TOKEN must be a granular access token scoped to @agent-context-containment with read and
+      # write access AND "bypass 2FA" enabled - a classic automation token, or a granular one without
+      # that setting, is refused with 403 at publish time.
+      - name: Publish (dry run)
+        if: ${{ inputs.dry_run }}
+        run: pnpm -r publish --dry-run --access public --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish
+        if: ${{ !inputs.dry_run }}
+        run: pnpm -r publish --access public --no-git-checks --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::The release did not publish."
+          echo "A 403 here usually means NPM_TOKEN is not a granular token with 'bypass 2FA' enabled."
+          echo "Do NOT weaken any gate above to get past a failure - fix the claim or the token."
+          echo "See PUBLISHING.md."

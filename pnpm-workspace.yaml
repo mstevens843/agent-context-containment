@@ -1,6 +1,6 @@
 packages:
   - "packages/*"
-  # examples is a workspace member so it can resolve @agent-containment/* by name. The sibling repo
+  # examples is a workspace member so it can resolve @agent-context-containment/* by name. The sibling repo
   # excludes its examples directory, which means nothing in it can import the packages it is meant
   # to demonstrate - a latent bug there rather than a convention worth copying. It stays `private`
   # so it is never published.

@@ -39,7 +39,7 @@ Use the ingestion helpers. They do not infer anything — you are still declarin
 mistakes impossible that a hand-written literal makes easy:
 
 ```ts
-import { contextOf, fromUser, fromEmail, derivedOutput } from "@agent-containment/core"
+import { contextOf, fromUser, fromEmail, derivedOutput } from "@agent-context-containment/core"
 
 const { sources, content } = contextOf([
   fromUser("task", "Reply to the Northwind invoice mail."),
@@ -59,7 +59,7 @@ edge and you have laundered the page in one line.
 ## 3. Decide through the guard, not the engine
 
 ```ts
-import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-containment/ledger"
+import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-context-containment/ledger"
 
 const guard = createGuard({
   clock: Date.now,

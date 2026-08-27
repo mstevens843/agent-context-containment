@@ -204,7 +204,7 @@ for (const m of MUTATIONS) {
     writeFileSync(path, original.replace(m.find, m.replace));
     // A build failure counts as CAUGHT: the mutation was rejected by the compiler, which is a real
     // check even though it is not a test. Recorded distinctly so the distinction stays visible.
-    const built = run(`pnpm -s --filter @agent-containment/${m.package} build`);
+    const built = run(`pnpm -s --filter @agent-context-containment/${m.package} build`);
     if (!built.ok) {
       console.log("caught (build)   the compiler rejected it");
       continue;

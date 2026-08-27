@@ -12,7 +12,7 @@
 // on receipt id alone would happily free a row another host had just consumed, handing them a replay -
 // and it would do it silently, because freeing a row looks exactly like ordinary cleanup.
 
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import type { AsyncReceiptLedger, Reservation } from "./async.js";
 import type { LedgerGuarantees, SpentRecord } from "./index.js";
 

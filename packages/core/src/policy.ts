@@ -626,10 +626,28 @@ function coverFor(
    *
    * See docs/DEFECTS_FOUND.md §11.
    *
-   * THIS IS THE v0.8 MITIGATION, kept as defence in depth. The class fix is the SLOT model above -
-   * `slotsOf`, `argPath`, and a label-only receipt matching nothing where the label repeats. This
-   * guard is now almost unreachable, because a receipt can only match one slot; it still catches the
-   * case where a caller gives two arguments the same explicit `path`.
+   * THIS IS THE v0.8 MITIGATION, KEPT AS DEFENCE IN DEPTH, AND IT IS NOW UNREACHABLE.
+   *
+   * The class fix is the SLOT model above - `slotsOf`, `argPath`, and a label-only receipt matching
+   * nothing where the label repeats. Together those make a receipt match AT MOST ONE slot, so
+   * `usedReceipts` can never already hold it.
+   *
+   * An earlier version of this paragraph said the guard was "almost unreachable" and "still catches
+   * the case where a caller gives two arguments the same explicit `path`". THAT SENTENCE WAS FALSE.
+   * Colliding explicit paths are suffixed by rule 4 of `slotsOf` - args `[{name:"a",path:"p"},
+   * {name:"b",path:"p"}]` produce slots `["p","p#1"]` - so a receipt with `argPath: "p"` admits
+   * exactly one of them and the guard still does not fire. An exhaustive sweep of 6,912 argument and
+   * receipt shapes reaches it zero times, with and without the guard present.
+   *
+   * It is kept rather than deleted because it is a fail-closed backstop costing one set lookup, and
+   * because the property that makes it dead - slot uniqueness - is exactly the kind of invariant a
+   * later refactor could weaken without noticing. `unguarded.test.ts` asserts BOTH halves: that no
+   * receipt covers two slots, and that this guard is currently unreachable. If slot uniqueness ever
+   * breaks, that test fails and says this guard has come alive, rather than letting it sit here
+   * looking like protection that was never needed.
+   *
+   * Recorded as confirmed-dead in docs/DEFECTS_FOUND.md §20. This is the SECOND false claim removed
+   * from this comment block; the first was corrected in v0.9 and is described below.
    *
    * An earlier version of this comment claimed a second fix - "rejecting duplicate argument names
    * outright" - that was never written. Nothing enforced it and nothing could have; duplicate labels

@@ -21,7 +21,7 @@
 // `reviewer.contract.test.ts` enforces the denial structurally, the way `contract.test.ts` enforces
 // the purity of the core - by scanning this file for the vocabulary it must not contain.
 
-import type { Provenance } from "@agent-containment/core";
+import type { Provenance } from "@agent-context-containment/core";
 
 /** What a field MEANS, in the words a dialog would use. Deliberately not the engine's role names. */
 export type FieldMeaning = "who or where" | "how much" | "which" | "what content" | "a flag";

@@ -34,6 +34,7 @@ import {
   referenceProfile,
   runCorpus,
   runWorkflow,
+  sensitivity,
 } from "../packages/conformance/dist/index.js";
 
 const ROOT = new URL("..", import.meta.url).pathname;
@@ -61,6 +62,34 @@ const GENERATORS = {
         `| **${r.domain}** | ${r.title.toLowerCase()} | ${r.completed + r.reviewed} kept, ${stopped} stopped |`,
       );
     }
+    return lines.join("\n");
+  },
+
+  "mapping-sensitivity": () => {
+    // The imported split's robustness figures. Hand-typed in corpus/imported/ATTRIBUTION.md until
+    // v1.0, where they were found three versions stale - in the one document family the prose guard
+    // did not scan.
+    const HERE = `${ROOT}corpus/imported/`;
+    const imported = loadSplit(`${ROOT}corpus/imported`, "imported");
+    const lines = ["```"];
+    for (const [file, label] of [
+      ["MAPPING.json", "direct harm  "],
+      ["MAPPING_DS.json", "data stealing"],
+    ]) {
+      const m = JSON.parse(readFileSync(HERE + file, "utf8"));
+      const rs = m.cases.map((x) =>
+        sensitivity(
+          x,
+          imported.find((c) => c.id === x.id),
+        ),
+      );
+      const robust = rs.filter((r) => r.robust).length;
+      const broken = rs.filter((r) => r.permittedByUnderstating.length > 0).length;
+      lines.push(
+        `${label}  ROBUST to peer mappings ${robust}/${rs.length}   permitted when UNDERSTATED ${broken}/${rs.length}`,
+      );
+    }
+    lines.push("```");
     return lines.join("\n");
   },
 
@@ -152,6 +181,57 @@ const GENERATORS = {
     return lines.join("\n");
   },
 
+  // ---- repo-stats ------------------------------------------------------------------------------
+  // WHY THIS IS GENERATED RATHER THAN REGISTERED. A line-count table is the worst kind of hand-typed
+  // number: nobody re-counts it, every pass invalidates it, and it looks authoritative. At v1.0-rc
+  // every row of it was stale - 34 test files when there were 41, 13 examples when there were 14,
+  // 11,018 source lines when there were 11,296 - and none of it was caught, because the unregistered
+  // survey only reported it. Counting beats registering here: there is nothing to keep in sync.
+  "repo-stats": () => {
+    const count = (cmd) =>
+      Number(execSync(cmd, { cwd: ROOT, encoding: "utf8", shell: "/bin/bash" }).trim());
+    const loc = (find) =>
+      Number(
+        execSync(`${find} | xargs wc -l | tail -1 | awk '{print $1}'`, {
+          cwd: ROOT,
+          encoding: "utf8",
+          shell: "/bin/bash",
+        }).trim(),
+      );
+    const SRC =
+      "find packages -name '*.ts' -not -name '*.test.ts' -not -path '*/node_modules/*' -not -path '*/dist/*'";
+    const TEST = "find packages -name '*.test.ts' -not -path '*/node_modules/*'";
+    const EX = "find examples -name '*.ts'";
+    const SCRIPT = "find scripts -name '*.mjs'";
+    const srcLoc = loc(SRC);
+    const testLoc = loc(TEST);
+    const exLoc = loc(EX);
+    const scriptLoc = loc(SCRIPT);
+    const testFiles = count(`${TEST} | wc -l`);
+    const exFiles = count(`${EX} | wc -l`);
+    const scriptFiles = count(`${SCRIPT} | wc -l`);
+    const shellFiles = count("find scripts -name '*.sh' | wc -l");
+    // COUNTED OVER `docs/` ONLY, AND THAT IS NOT A SIMPLIFICATION.
+    //
+    // The first version counted every `.md` in the repository - including STATUS.md, which is where
+    // this block LIVES. Writing the block changed STATUS.md's length, which changed the number the
+    // block reports, which made the block stale again: `blocks:write` followed immediately by
+    // `blocks:check` failed with no fixed point to converge on. A generated block that counts the
+    // file it is written into cannot be checked. `docs/` carries no generated blocks.
+    const docFiles = count("find docs -name '*.md' | wc -l");
+    const docLoc = loc("find docs -name '*.md'");
+    const n = (x) => x.toLocaleString("en-US");
+    return [
+      "| | |",
+      "|---|---|",
+      `| Source LOC | **${n(srcLoc)}** across 5 packages |`,
+      `| Test LOC | **${n(testLoc)}** across ${testFiles} files |`,
+      `| Example LOC | **${n(exLoc)}** across ${exFiles} files |`,
+      `| Script LOC | **${n(scriptLoc)}** — ${scriptFiles} report/proof/import scripts, ${shellFiles} shell |`,
+      `| Total TypeScript | **${n(srcLoc + testLoc + exLoc)}** |`,
+      `| Docs (docs/) | **${n(docLoc)} lines** across ${docFiles} files |`,
+    ].join("\n");
+  },
   "test-counts": () => {
     // Read from the packages themselves rather than from a remembered figure.
     const out = execSync("pnpm -s test 2>&1 | grep -E 'Tests +[0-9]+ passed'", {
@@ -172,7 +252,9 @@ const GENERATORS = {
 import { execSync } from "node:child_process";
 
 // ---- the files that carry blocks ---------------------------------------------------------------
-const FILES = ["README.md", "STATUS.md"];
+// Any file may carry a block. `corpus/imported/ATTRIBUTION.md` is here because its numbers went
+// stale for three versions while sitting in the one directory nothing scanned.
+const FILES = ["README.md", "STATUS.md", "corpus/imported/ATTRIBUTION.md"];
 const OPEN = /<!-- GENERATED:([a-z0-9-]+) -->/g;
 
 const mode = process.argv.includes("--write") ? "write" : "check";

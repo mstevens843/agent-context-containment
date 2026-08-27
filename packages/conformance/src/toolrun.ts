@@ -36,8 +36,8 @@ import {
   admitConfirmedTuple,
   admitUserConfirmedValue,
   sourceId,
-} from "@agent-containment/core";
-import { type Guard, createGuard, memoryLedger } from "@agent-containment/ledger";
+} from "@agent-context-containment/core";
+import { type Guard, createGuard, memoryLedger } from "@agent-context-containment/ledger";
 import {
   type Evidence,
   type ReviewDecision,

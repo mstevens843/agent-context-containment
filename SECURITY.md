@@ -51,6 +51,6 @@ unconditionally has disabled the rule.
 
 ## Supply chain
 
-The published packages have **zero runtime dependencies**. `@agent-containment/core` imports nothing;
+The published packages have **zero runtime dependencies**. `@agent-context-containment/core` imports nothing;
 the others import only each other. The Postgres ledger adapter takes a query function rather than a
 driver, so adding cross-host durability does not add a native module to the path of a policy decision.

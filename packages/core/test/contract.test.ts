@@ -58,9 +58,9 @@ describe("the import scanner itself", () => {
   const scan = (text: string): string[] =>
     [
       ...withoutComments(text).matchAll(
-        /^\s*(?:import|export)\b[^;\n]*?\bfrom\s*["']([^"']+)["']/gm,
+        /^[ \t]*(?:import|export)\b[^;]*?\bfrom\s*["']([^"']+)["']/gm,
       ),
-      ...withoutComments(text).matchAll(/^\s*import\s*["']([^"']+)["']/gm),
+      ...withoutComments(text).matchAll(/^[ \t]*import\s*["']([^"']+)["']/gm),
     ].map((m) => m[1] ?? "");
 
   it("finds a MULTI-LINE import, which the first anchored version missed", () => {

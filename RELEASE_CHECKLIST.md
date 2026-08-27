@@ -110,3 +110,32 @@ run that passed are the same thing.
 - [ ] `docs/LIMITATIONS.md` rows updated, including ones that got worse
 - [ ] no API key anywhere in the tree (a test walks it; read the diff too)
 - [ ] `PUBLISHING.md` packaging checklist
+
+## Refutation conduct
+
+Not a command — a property of how the adversarial pass was run. `pnpm audit:release` cannot see it.
+
+- [ ] Every refuter confirmed the **absolute path** of the repository it audited before reporting.
+      A v1.0 run had four agents audit the wrong repository entirely; only one of them noticed.
+- [ ] **No two mutating refuters shared a working tree.** Concurrent mutation means each was reading
+      the other's changes as its own result.
+- [ ] Every mutation was **rebuilt** (`pnpm build`) before the suite was run, **reverted** after, and
+      the suite confirmed green before the next one.
+- [ ] Every new branch test was **watched to fail** under the mutation it was written for.
+
+**If refutation was run concurrently in one tree, the result is not evidence and this release is not
+green** — whatever the run reported. See docs/ADVERSARIAL_AUDIT.md.
+
+## User actions before tagging v1.0
+
+One item an automated run cannot decide.
+
+- [ ] **Decide the freeze.** `pnpm verify:freeze` exits 1 and records `attempted_and_failed`, by
+      design, because the git-object freeze artifact does not exist. Tag v1.0 with that state
+      recorded as UNAVAILABLE, or create the artifact first — but do not weaken the check.
+
+**Release debris: none.** `probe-tmp.mjs` was deleted at v1.0 finalization. The exemption that
+carried it is gone too — `packages/conformance/test/hygiene.test.ts` now holds an **empty**
+`KNOWN_DEBRIS`, and three tests keep it that way: any unreferenced root script fails the suite, an
+exemption naming a file that no longer exists fails, and a non-empty list at release fails. All three
+were watched to fail under their own mutations.

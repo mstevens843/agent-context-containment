@@ -5,7 +5,7 @@
 // few, the generated ones are unrealistic and many, and one number over both would let the count
 // from the generator lend credibility to the runs a reader might actually read.
 
-import { sourceId } from "@agent-containment/core";
+import { sourceId } from "@agent-context-containment/core";
 import type { Scenario } from "./agentrun.js";
 
 /** Multi-step plans where untrusted content arrives mid-run and changes what happens next. */

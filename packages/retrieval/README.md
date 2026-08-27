@@ -1,11 +1,11 @@
-# @agent-containment/retrieval
+# @agent-context-containment/retrieval
 
 BM25 over chunks that **carry their provenance**, because retrieval is the canonical indirect-injection
 path: content the user never saw, selected by relevance to the user's own question, spliced into a
 prompt.
 
 ```ts
-import { index, search } from "@agent-containment/retrieval"
+import { index, search } from "@agent-context-containment/retrieval"
 ```
 
 Every chunk keeps its source id, so a value derived from a retrieved chunk arrives at `decide()`

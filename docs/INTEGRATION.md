@@ -1,6 +1,6 @@
 # Integration
 
-**Use `@agent-containment/ledger`. Use `@agent-containment/core` directly only if you know why.**
+**Use `@agent-context-containment/ledger`. Use `@agent-context-containment/core` directly only if you know why.**
 
 ## The hazard this exists for
 
@@ -21,7 +21,7 @@ own a ledger.
 So the fix is a shell whose input type **does not have those fields**:
 
 ```ts
-import { createGuard } from "@agent-containment/ledger";
+import { createGuard } from "@agent-context-containment/ledger";
 
 const guard = createGuard({ clock: () => Date.now() });
 const verdict = guard.decide({ action, sources, receipts });
@@ -136,7 +136,7 @@ the caller *which* one it was — without it there is no way to separate "I reco
 ```ts
 import {
   createGuard, durableLedger, postgresSpendStore, proveCrossHost, crossHostProven, POSTGRES_SCHEMA,
-} from "@agent-containment/ledger"
+} from "@agent-context-containment/ledger"
 
 // Run POSTGRES_SCHEMA once at deploy time. It is CREATE TABLE IF NOT EXISTS.
 const connect = () => postgresSpendStore({
@@ -198,7 +198,7 @@ Three methods and the metadata block. Two of the three guarantees in the interfa
 *silently* when they are missing, so the package ships a runnable suite rather than a checklist:
 
 ```ts
-import { checkLedger, formatLedgerChecks } from "@agent-containment/ledger";
+import { checkLedger, formatLedgerChecks } from "@agent-context-containment/ledger";
 console.log(formatLedgerChecks(checkLedger(() => myPostgresLedger())));
 ```
 

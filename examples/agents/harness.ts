@@ -21,8 +21,8 @@ import {
   type Verdict,
   actionId,
   sourceId,
-} from "@agent-containment/core";
-import { type Guard, createGuard, memoryLedger } from "@agent-containment/ledger";
+} from "@agent-context-containment/core";
+import { type Guard, createGuard, memoryLedger } from "@agent-context-containment/ledger";
 
 export interface Step {
   readonly name: string;

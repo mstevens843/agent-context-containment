@@ -18,8 +18,12 @@ value come from, and what is it being used for* — decide a RAG agent quoting a
 email agent picking a recipient, a support agent issuing a refund, a DevOps agent running a shell
 command, a research agent fetching a URL, and a code agent reading an issue somebody else filed.
 
-**No line of the engine knows what any of those domains is**, and a test asserts its source carries no
-word like `refund`, `deploy` or `invoice`. Payments appear as *one* high-consequence domain, never the
+**No line of the decision engine knows what any of those domains is**, and a test asserts that
+`policy.ts` — the table `decide()` reads — carries no word like `refund`, `kubernetes` or `invoice`.
+One shipped file is deliberately exempt: `toolrisk.ts` is an *advisory* naming heuristic that reads
+tool names, and its mutating-verb vocabulary contains `deploy` and `refund` alongside `delete` and
+`pay`. It never feeds a decision — `decide()` does not import it — and the exemption is asserted, not
+assumed, so it cannot silently widen. Payments appear as *one* high-consequence domain, never the
 centre — a containment model that only worked on money would not be containment.
 
 ```bash
@@ -54,8 +58,8 @@ two fields whose omission silently disables replay protection as `never` — the
 forget.
 
 ```ts
-import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-containment/ledger"
-import { actionId, sourceId } from "@agent-containment/core"
+import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-context-containment/ledger"
+import { actionId, sourceId } from "@agent-context-containment/core"
 import fs from "node:fs"
 
 const guard = createGuard({
@@ -448,14 +452,14 @@ and admits the next one; there is no finite list of ways to say it in English.
 **Real, pinned by tests that can fail:** the policy engine, the two-axis table, per-role ceilings,
 the provenance join, the declassification rules, receipt binding and replay, the corpus checker, the
 guarded `createGuard` path with its multi-process ledger, the contract test that fails the build if
-the pure core grows a clock or an import. **414 tests across five packages.**
+the pure core grows a clock or an import. **534 tests across five packages.**
 
 **Heuristics in more confident clothes:** the BM25 retriever is lexical and strips one plural `s`; it
 is not a stemmer and `policies` does not match `policy`. Its job is carrying chunk provenance through
 retrieval, not ranking. The render-safety check on confirmed values catches bidi overrides and
 zero-width characters but cannot see pixels.
 
-**Scaffolding:** 68 hand-written and imported cases. This is a test suite, not a benchmark. **No
+**Scaffolding:** 98 hand-written and imported cases. This is a test suite, not a benchmark. **No
 adaptive attacker** — the adaptive split and the 648 generated variants are both mine, and nobody
 iterates against the engine. **No model in the loop anywhere**: the agent-run simulator declares its
 reactions, so it cannot surprise the policy the way a real planner would, and CaMeL's honest "77 vs
@@ -478,7 +482,7 @@ the holdout has to be *committed* before the engine exists rather than merely wr
 **Use the guard, not the raw engine.**
 
 ```ts
-import { createGuard } from "@agent-containment/ledger";
+import { createGuard } from "@agent-context-containment/ledger";
 const guard = createGuard({ clock: () => Date.now() });
 const verdict = guard.decide({ action, sources, receipts });
 ```

@@ -38,34 +38,34 @@ importers:
 
   examples:
     dependencies:
-      '@agent-containment/classifier':
+      '@agent-context-containment/classifier':
         specifier: workspace:*
         version: link:../packages/classifier
-      '@agent-containment/core':
+      '@agent-context-containment/core':
         specifier: workspace:*
         version: link:../packages/core
-      '@agent-containment/ledger':
+      '@agent-context-containment/ledger':
         specifier: workspace:*
         version: link:../packages/ledger
-      '@agent-containment/retrieval':
+      '@agent-context-containment/retrieval':
         specifier: workspace:*
         version: link:../packages/retrieval
 
   packages/classifier:
     dependencies:
-      '@agent-containment/core':
+      '@agent-context-containment/core':
         specifier: workspace:*
         version: link:../core
 
   packages/conformance:
     dependencies:
-      '@agent-containment/classifier':
+      '@agent-context-containment/classifier':
         specifier: workspace:*
         version: link:../classifier
-      '@agent-containment/core':
+      '@agent-context-containment/core':
         specifier: workspace:*
         version: link:../core
-      '@agent-containment/ledger':
+      '@agent-context-containment/ledger':
         specifier: workspace:*
         version: link:../ledger
 
@@ -73,13 +73,13 @@ importers:
 
   packages/ledger:
     dependencies:
-      '@agent-containment/core':
+      '@agent-context-containment/core':
         specifier: workspace:*
         version: link:../core
 
   packages/retrieval:
     dependencies:
-      '@agent-containment/core':
+      '@agent-context-containment/core':
         specifier: workspace:*
         version: link:../core
 

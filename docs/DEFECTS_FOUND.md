@@ -771,3 +771,451 @@ and reported on the guard. The claim registry asserted a word that was never sca
 Each was caught the same way: somebody who did not write it went looking for the reason it might be
 wrong. That is the entire content of `docs/ADVERSARIAL_AUDIT.md`, and it is why the last line of
 `pnpm audit:release` says *"now get somebody to refute it."*
+
+---
+
+## 18. A registry rule described a check that was never built
+
+**Found by:** the v1.0 release-refutation pass — editing five load-bearing numbers to wrong values and
+watching `pnpm audit:docs` pass all five.
+**Fixed:** the check now exists (`pnpm verify:numbers`), and the rule that overstated it is corrected.
+
+`docs/claims.json` carried this as one of its own rules:
+
+> "A numeric claim must name the script that produces it. **`pnpm audit:claims` re-runs that script
+> and compares.**"
+
+It did not re-run anything. `audit:claims` checked that a claim *names* a command and that the command
+*exists as a package script*. Nothing ever ran it, and nothing compared the number.
+
+**What that meant in practice.** Five deliberately-wrong numbers — tests, imported cases, corpus size,
+and both mis-declaration figures — were injected into README, STATUS and TRUST_BOUNDARIES. `audit:docs`
+reported **OK** on all five.
+
+Generated blocks solved this for *tables*. They cannot solve it for a number inside a sentence:
+*"declaring a send tool as read-only lets 17 of 17 attacks through"* reads as prose, and a block marker
+mid-sentence would wreck it. So the registry claimed a different mechanism instead — and the claim was
+the mechanism.
+
+**The fix.** `verify:numbers` computes each registered fact from the code, then scans every document
+for a sentence stating a **different** value for that same fact. Wired into `audit:docs`. Two rounds
+of tightening were needed and both are recorded, because both are the same failure in miniature:
+
+- The first version flagged **six historical numbers and two real ones** — *"deleting the branch left
+  74 of 74 tests passing"* is a fact about a past state and cannot go stale. A checker whose findings
+  are mostly noise gets ignored, which is how a stale number survives. Patterns now match only
+  current-state phrasings, and that boundary is principled: past-tense narrative cannot drift.
+- The second version **missed `**9 of 17** direct-harm`**, because it required a plain space between
+  the number and the noun and the documents use markdown emphasis. Two of six controls escaped.
+
+**It found four genuinely stale numbers immediately:** `README.md` claiming **414 tests** (two passes
+old) and **68 corpus cases** (30 short), and `PUBLISHING.md` repeating the 68.
+
+**And a fifth, in the one place nothing looked.** The prose guard's walker skipped the entire `corpus`
+directory to avoid 700 JSON case files — and took `corpus/imported/ATTRIBUTION.md` with it. That
+document was still publishing **6/6** and **4/6** three versions after they became **17/17** and
+**9/17**. It is now a generated block, and the walker skips the noise rather than the prose.
+
+**What this still does not cover, stated because the last version of this rule overstated itself:**
+`verify:numbers` knows a registered list of facts. A number nobody put on that list is unchecked
+prose. The list is short and load-bearing rather than complete, and that is the honest description.
+
+## 19. The gates were all outside CI, and 30 safety branches had nothing behind them
+
+Five passes of this project have now built machinery to stop it overstating itself: the mutation
+audit (§15), the purity import scan (§16), the prose guard (§17), `verify:numbers` (§18). At v1.0 an
+adversarial reviewer was asked to falsify the release claims rather than re-run them. Four things
+came back, and the first is the one that explains the rest.
+
+**The whole apparatus ran nowhere.** `.github/workflows/ci.yml` ran `lint`, `typecheck`, `build`,
+`test` and a holdout `shasum`. It did not run `audit:docs`, `blocks:check`, `verify:numbers`,
+`audit:claims` or `audit:mutations` — not one of the five gates built between v0.8 and v1.0. So the
+repository sat with **`pnpm audit:docs` exiting 1** and `pnpm audit:release` failing, while every
+checkmark on every push was green. §17 recorded "the control for the entire mutant apparatus was
+outside CI" as a single oversight. It was a pattern, and it had eaten everything built since.
+
+The gates are now their own CI job, and `claimregistry.test.ts` asserts that job still names each
+one — deleting a step fails the suite instead of quietly reducing coverage. `verify:freeze` is
+deliberately excluded and that exclusion is *also* asserted, so "it is not in CI" stays a recorded
+decision rather than becoming an oversight somebody corrects.
+
+**A number went stale inside the pass that built the stale-number checker.** README said `454 tests`.
+The suite produced `461`: this pass added `doctor.test.ts` after the README was updated, and
+`verify:numbers` — which had passed earlier the same session — was never re-run. Worse, the registry
+claimed `hand-typed-numbers-agree` as PROVEN and named `claimregistry.test.ts` as its defence. That
+file never invokes `verify:numbers`. It cannot: `verify:numbers` shells out to `pnpm test`, so it can
+never run inside vitest. **The claim was defended by a test structurally incapable of observing it** —
+§15's exact shape, in the fix for §18. Its evidence now points at `scripts/verify-numbers.mjs` and
+the CI job that runs it.
+
+**The generality claim was broader than its evidence, and already false.** `claims.json` said the
+engine special-cases no domain — "no refund, ticket, deploy, kubernetes, invoice, solana or USDC
+anywhere in its code" — and README said a test asserts its source carries no such word. The test read
+**one file**, `policy.ts`. Appending `export const X = "deploy"` to `check.ts` passed 461/461. And
+`refund` and `deploy` were *already live* in shipped, publicly-exported `toolrisk.ts`. The scan now
+walks every file in the core package. `toolrisk.ts` keeps the two words — it is an advisory naming
+heuristic whose vocabulary is English mutating verbs — but the exemption is now pinned by a second
+test that fails if `decide()` ever imports it, so an advisory file cannot quietly become a decision
+path while carrying a standing permission.
+
+**The negative-control rule checked string length.** `claimregistry.test.ts` required
+`negativeControl.length > 20`. The reviewer replaced the purity claim's control — the most
+fundamental claim in the project — with 76 characters of nonsense, and `audit:claims` reported 25/25.
+Three claim texts rewritten to be flatly false ("999 imported cases", "4 of 4 silent attacks", "the
+500 v0 holdout cases") all survived every gate, because **`verify:numbers` walks `.md` files and the
+registry is `.json`**: the one document that exists to stop overstated claims was the one document
+whose numbers nothing checked. Controls must now name a resolvable artifact — a mutation, a path that
+exists, or a package script — and every entry was re-anchored.
+
+### The 30 unguarded branches
+
+`scripts/audit-mutations.mjs` reports 8/8 caught. That is 8 branches somebody thought to list. A
+sweep of **105 guards** — neutralise, build, run the suite, restore — found **73 protected, 30 with
+no test behind them, and 2 unreachable**. The ones that turn a refusal into an ALLOW are now closed
+in `packages/core/test/unguarded.test.ts`, each written against its mutation and each *watched to
+fail* under it:
+
+| branch | what its removal does |
+|---|---|
+| unknown capability → `DENY` | an unrated capability is **permitted**. The string `unknown_capability` appeared in no test and no corpus case; `manifest.ts` builds a contradiction on this premise and the premise was never exercised |
+| receipt role check | a receipt for an **amount** admits a **recipient** |
+| `taintAtMost(a.taint, r.lifts)` | a receipt lifting `USER_CONTROLLED` admits `UNTRUSTED_EXTERNAL` |
+| `row.liftableBy.has(r.rule)` | an allowlist entry admits on a confirmation-only row |
+| `slots[i] === a.name` | a label-only receipt reaches an argument pinned to an explicit path |
+| tuple refusal `spends: []` | a refusal **burns the human approvals** it just refused |
+
+**The fake Postgres was enforcing what the adapter is supposed to enforce.** `async.test.ts`'s
+`fakePg` asserts SQL text for the consume and release statements — but for the reclaim `UPDATE` it
+asserted nothing and re-implemented the predicate in JavaScript. So `asyncpg.ts` could drop
+`state = 'reserved'` or `at < $5` from its `WHERE` clause and every test passed: *the double refused
+on the adapter's behalf*. Against a SQL-faithful double both are live double-spends — a consumed
+receipt becomes re-reservable, and a reservation one millisecond old is stolen from its holder. That
+is §15 one layer down, inside the file carrying the entire cross-host guarantee. The three missing
+text assertions are in place and each was confirmed to fail under its mutation.
+
+**Still open at the time of this pass, and named rather than closed:** ~24 of the 30 were recorded but untested — the tuple-key
+slot mutations (`P28`–`P30`), `decideOnly`'s replay check (masked by the §10 re-decide fallback,
+which is §14's shape: a defect hidden by an unrelated mechanism), the in-memory forged-reservation
+check, five `validatePolicy` *suspicion* rules, and the audit-trail taint join. They are listed here
+because a known gap that is written down is a different thing from one nobody has looked for.
+
+**What this pass says about the method.** Every one of these was found by making a claim false and
+watching nothing happen. None was found by a passing suite — and two were found in machinery built
+one pass earlier *for this exact purpose*. Twice during the fix the same trap closed on the fix
+itself: four new tests passed under their own mutations because they asserted on the decision word
+while the action was refused for an unrelated reason, and a ledger assertion sat in a branch the
+build never rebuilt. Both were caught only by running the negative control. **A test that has not
+been seen to fail is not evidence, and that applies to the tests written to prove it.**
+
+## 20. Closing the §19 branch debt, and what the debt was hiding
+
+§19 recorded 30 safety branches with no test behind them and 2 that could not run at all, and closed
+six. This pass closed the rest of the ALLOW-producing set and gave the unreachable ones a disposition
+instead of a mention. Every test below was written against a specific mutation and **watched to fail
+under it**; the mutation is named in the test so a future reader can re-run it.
+
+### The tuple gate had five holes and one shape that finds all of them
+
+`P22`, `P23`, `P28`, `P29`, `P30` — the rule check, the key check, and slot-versus-label keying in
+`admittedByReceipt`, `tupleKey` and `tupleValue`. The gate is the only thing standing between "two
+arguments each approved separately" and "a combination nobody looked at".
+
+The case that discriminates is **two arguments sharing a label in different roles**. Keyed by slot
+they are `v[0]` and `v[1]`, two members, and the gate fires. Keyed by label they are both `"v"`:
+`admittedByReceipt` collapses to one entry, the key becomes the self-naming `"v+v"` that
+`declassify.ts` exists to reject, and the gate vanishes. Where names are unique the two keyings are
+*identical*, which is why every existing test missed all five.
+
+Two of them also needed the sibling check neutralised to be visible at all — a tuple receipt with a
+wrong key is refused by the value comparison anyway, so the key mutation hides behind it. Isolating
+each guard took a receipt with `admitted` cleared for the key tests and a slot-correct key with a
+label-keyed value for the value test.
+
+### The dead branch was not dead for the reason the comment gave
+
+`usedReceipts.has(r.id)` is unreachable: an exhaustive sweep of 6,912 argument and receipt shapes
+reaches it zero times. Confirmed independently rather than taken on report.
+
+The comment justifying its retention said it "still catches the case where a caller gives two
+arguments the same explicit `path`". **That was false.** Colliding paths are suffixed by rule 4 of
+`slotsOf` — `[{name:"a",path:"p"},{name:"b",path:"p"}]` produces `["p","p#1"]` — so a receipt with
+`argPath: "p"` admits exactly one and the guard still does not fire. This is the **second** false
+claim removed from that same comment block; the first went in v0.9.
+
+**Disposition: KEEP, with the invariant asserted.** Deleting it looked right until the negative
+control ran: disabling slot uniqueness makes the guard fire **24 times** and catch what uniqueness
+would otherwise let through. It is real defence in depth, not decoration. Two tests now pin both
+halves — that no receipt covers two slots, and that this guard is currently unreachable — so if slot
+uniqueness ever weakens, the suite says the dead guard has come alive instead of leaving it looking
+like protection that was never needed.
+
+`P21` (`mixed && effect === "irreversible"`) is confirmed inert and its existing documentation is
+accurate, including why keeping it is right. Left as recorded-dead. Note its stated safety net is
+`M05`, which was in the untested set below.
+
+### Five suspicion rules held up by a count floor
+
+All 7 `validatePolicy` **contradiction** rules had named tests. Of 6 **suspicion** rules, only
+`HIGH_BLAST_RADIUS` did — the other five were held up by `findings.length > 0`, a floor the shipped
+table clears several times over, so deleting any one rule was invisible. Two of them
+(`IRREVERSIBLE_WITHOUT_CONFIRMATION`, `UNLIFTABLE_STEERING_CEILING`) delete findings the **shipped**
+table produces, and `pnpm verify:manifests` still said OK.
+
+`M05` is worse than the others: `policy.ts` promises "the invariant test fails at the same moment to
+say the band opened", and that promise was kept only by a `describe()` over the one shipped constant
+— while `decide(input, policy)` accepts any policy and the conformance package builds four at run
+time. **`manifest.ts` was written to fix exactly that failure mode and reproduced it internally.**
+
+Each rule now has a positive case and a **benign near-miss that must stay quiet**, because a rule
+that fires on everything is as useless as one that fires on nothing, and a near-miss is the only
+thing that proves the predicate is narrow rather than the assertion restating the rule text.
+
+`M14` — `contradictions()` filtered to always-empty — is a live gate, not a reporting nicety:
+`profiles.ts` throws on it to stop the conformance package publishing numbers from an invalid table,
+and doctor, manifest-report and report all count it. Nothing tested that it returns anything.
+
+### The ledger
+
+- **`X01`** — `decideOnly` had no replay protection. `decide` still refused, because the §10
+  re-decide path catches it via `commit`, so the whole suite passed with the primary check removed:
+  §14's shape, a defect hidden by an unrelated mechanism, here rescuing the engine rather than a
+  mutant. `decideOnly` is the read-only half of the API and the two-phase async protocol reads its
+  answer from there.
+- **`L08`** — the in-memory adapter accepted a **forged reservation id** on both consume and release.
+  The Postgres equivalent was tested; the in-memory one — the default, the one every example runs —
+  was not.
+- **`A09`** — the adapter could claim `crossHostSafe: true` on a ledger explicitly constructed
+  without it. The guard side was tested; the side that decides what is *claimed* was not, so the
+  check would have passed by agreeing with a lie.
+- **`L02`** — a throw between reserve and decide stranded the receipt.
+
+### The audit trail, and a guard tested on one path but not the other
+
+`P32` — the verdict's `taint` was an assignment, not a join, so a CLEAN argument after an
+UNTRUSTED_EXTERNAL one reported `CLEAN`. **No decision changes**, which is why every test passed:
+decisions are per-argument. What breaks is `check.ts`, which re-derives verdicts from a decision log
+to audit a third party's engine — a taint field reporting the last argument makes that log unusable
+for the one thing it exists for.
+
+`D16`/`D18` — the empty-value and deceptive-render refusals inside `admitConfirmedTuple`. The
+**identical** guards on the single-value path were both tested and both caught. The tuple path
+duplicated them and tested neither, so the higher-value route — the one ratifying a whole combination
+— was the unguarded one.
+
+### The gates, again
+
+CI now runs `audit:release` as well, the frozen-holdout check is asserted, and **Postgres is asserted
+to stay out**: without `DATABASE_URL` it reports SKIPPED and exits 0, so adding it would convert an
+honest skip into a green step that proves nothing. Removing any gate fails the suite; adding the
+Postgres rubber stamp fails it too. `STATUS.md` still graded the Postgres concurrency claim **PROVEN**
+while `docs/claims.json` had been regraded to SKIPPED in §19 — a live contradiction between two
+release documents, now reconciled, with the scope of a passing run stated: that database, that
+version, that topology, not Postgres in general.
+
+### What was still not covered at the end of this pass
+
+> **Superseded by §21.** All three were closed in the following pass and each was mutation-checked.
+> Kept here as the record of what this pass left behind, not as a current statement of risk.
+
+- **`A11`** (Postgres `stats` stale cutoff) and **`P20`** (mixed-provenance over-reporting) change
+  reporting, not decisions, and neither can produce an ALLOW. Recorded, untested.
+- **`L13`** — a receipt-free action makes one spurious ledger round-trip. A performance nit.
+- **`verify:numbers` now measures its own blind spot**: 130 unregistered numeric statements across 9
+  release-facing documents, reported and not enforced. Report mode is deliberate — a checker whose
+  output is mostly noise gets ignored, and an ignored checker is how a stale number survives. The
+  exemption rules are unit-tested in both directions, including a near-miss proving the rule set was
+  not tuned until it sees nothing. Promoting it to a gate is a decision for when that list stops
+  growing.
+- **`probe-tmp.mjs`** is still in the repository root. The automated run that found it could not
+  delete it, so its removal is a user action. A hygiene test now fails on any *other* unreferenced
+  root script, and fails again if the exemption outlives the file.
+
+### The method note, third pass running
+
+Three separate times across §19 and §20, a test written to close a branch **passed with that branch
+removed**: it asserted on the decision word while the action was refused for an unrelated reason.
+Twice, a ledger mutation appeared to change nothing because the test imports the *built* package and
+nothing had rebuilt it. None of these was visible from a green suite; all five were caught only by
+running the negative control.
+
+**A test that has not been seen to fail is not evidence — and that applies with full force to the
+tests written to prove it.**
+
+## 21. The release-hygiene pass, and a test harness that corrupted the release it was checking
+
+The last three unguarded branches are closed, every one mutation-checked. **All 30 branches the
+adversarial sweep found unprotected are now closed** — 9 in §19, 18 in §20, 3 here — and the 2
+unreachable ones are dispositioned rather than described as covered. The interesting finding is not
+any of them.
+
+### The negative control destroyed the artifact it was proving
+
+`verify:numbers` has to be shown failing, and the obvious way to show it is to make a release
+document wrong: append a fabricated sentence to `docs/ADOPTION_GUIDE.md`, run the script, restore in
+`finally`. That is what the first version did.
+
+Two properties combined badly. The script counts tests by shelling out to `pnpm test`, and `pnpm test`
+runs the file containing that test — **so every run re-entered the script**. A re-entrancy guard was
+added, and it was not enough: each nested level still ran a full suite, and the outer call never
+returned. When the machine restarted mid-run, **not one of the 92 nested `finally` blocks executed.**
+
+The repository was left with **92 copies** of the sentence *"The adapter was checked against 87
+separate deployment shapes"* in a release document, and a README claiming **99999 tests**. Both were
+fabrications written by the test that exists to catch fabrications. Neither would have been caught by
+any gate: `verify:numbers` was itself broken at the time, and the fabricated sentence is not a
+registered fact.
+
+The fix is structural, not careful:
+
+- **`--fast`** skips only the `pnpm test` count, so the script cannot re-enter the suite at all. It
+  runs in 0.2s instead of minutes, and the `tests` fact *leaves* the registered list rather than
+  sitting in it as a placeholder — a fact registered with a value of 0 would flag every correct
+  statement as stale, which is the `-1` mistake from earlier in this pass repeated one level on.
+- **`CONTAINMENT_EXTRA_DOC`** adds one throwaway file to the scan. The negative control writes to a
+  temp directory and **no release document is ever modified**.
+
+The rule this pass adds: *a test that can corrupt the artifact it is checking is not a safe test,
+however careful its cleanup.* `finally` is not a guarantee — it is a guarantee conditional on the
+process surviving, and the process is exactly what fails when a test loops.
+
+Two smaller instances of the same shape, both caught by running the thing rather than reading it:
+the extensible scan list was wired into the survey loop but **not** the stale-number loop, so half
+the hook worked; and the `EXTRA_DOC` constant was declared below its first use, which put **every**
+invocation — hooked or not — into a temporal-dead-zone `ReferenceError`. The script was broken for
+all callers and the test suite is what said so.
+
+### The unregistered survey found real staleness the moment it could count
+
+§20 added a survey that counts unchecked numeric prose. Reading its output, rather than its total,
+turned up four stale headline numbers no gate could see: the registry described as **20 headline
+claims** when it held 21, a defect log whose stated total was five entries behind its real one, and
+a whole repository-statistics table — source LOC, test LOC, example count — that was wrong in **every row**: 34 test files when
+there were 41, 13 examples when there were 14.
+
+Triage, by category:
+
+| disposition | what | count |
+|---|---|---|
+| **registered** | holdout cases · silent attacks · examples · CI gates · generated blocks · registry claims · defects recorded | 7 new facts, 12 total |
+| **converted to a generated block** | the repository-statistics table — `repo-stats` | 6 rows |
+| **exempted as uncheckable** | versions · years · §refs · mutation ids · identifiers with digits · units · inline code · fenced code · generated blocks · past-tense narrative | 13 rules |
+| **rewritten to carry no count** | two sentences in the new branch-risk table | 2 |
+| **left in WARN, ratcheted** | everything else | 112 |
+
+The statistics table is the clearest case for generating over registering: there is nothing to keep
+in sync. A registered fact still has a sentence somebody has to write correctly; a generated block
+has no such sentence.
+
+### WARN became a ratchet, which is the part that will matter
+
+Report mode was the honest answer to "most numeric prose cannot go stale" and was also a way of never
+acting. The count is now a **ceiling**: the 112 that exist are reported and not enforced, and the
+total **may not grow**. A new hand-typed number in a release-facing document is a new unchecked
+claim, which is what every defect in this file started as.
+
+It earned itself immediately. Adding the branch-risk table to `STATUS.md` broke the ratchet on the
+same run — two new bare counts in a table written by the person who built the ratchet. They were
+rewritten to reference §20 rather than restate it, and the ceiling held at 112. That is the check
+doing precisely the job it was built for, to its author, within minutes.
+
+Lowering the ceiling is the maintenance task. Raising it should require someone deciding, in a diff,
+that a new hand-typed claim is worth it — the conversation that was never had for any of the 112.
+
+### `probe-tmp.mjs`
+
+> **Resolved in §22.** Deleted at v1.0 finalization, and the exemption went with it. Kept here as the
+> record of what this pass could not do, not as a current statement.
+
+Still present at the end of this pass. Automated removal was refused by the run policy **three
+times**, so it was recorded as a user action in `RELEASE_CHECKLIST.md` with the exact command. `hygiene.test.ts` holds it as the sole
+entry in `KNOWN_DEBRIS`; any *other* unreferenced root script fails the suite immediately, and when
+this file is finally deleted the test that checks the exemption still names a real file **fails**, so
+the exemption cannot outlive the file it excuses.
+
+### The final adversarial rerun: two families had no control
+
+One mutation per release-claim family, run serially, each reverted before the next. Five were caught
+immediately. **Two were not**, and both are the same failure this file keeps recording — a check that
+looks like it covers a claim and does not.
+
+| family | mutation | caught by | before |
+|---|---|---|---|
+| numbers | README test count → 901 | `verify:numbers`, `audit:docs` | ✅ |
+| generated block | hand-edit a `repo-stats` row | `blocks:check` | ✅ |
+| CI gate | delete `audit:release` from `ci.yml` | `audit:claims` | ✅ |
+| freeze wording | STATUS row → the forbidden "still p-e-n-d-i-n-g" phrasing | `audit:docs` | ❌ **nothing** |
+| Postgres wording | regrade the default-run claim above its evidence | `audit:claims` | ✅ |
+| branch-risk table | assert the dispositioned branches carry ordinary coverage | — | ❌ **nothing** |
+| root debris | add a second `KNOWN_DEBRIS` entry | `hygiene.test.ts` | ✅ |
+
+**The freeze rule had a line-wide escape hatch.** §18 added the forbidden "coming soon" word to the
+freeze vocabulary, after STATUS carried it for four versions. What §18 did not notice is that the
+same rule ends in `|| /unavailable|attempted|failed|would|to cash/i.test(line)` — and that test runs
+over **the whole line**. The STATUS row legitimately says "Attempted and correctly rejected", so
+under mutation *the clause that makes the row honest was also the clause that excused the claim
+making it dishonest*. That word now has its own check with no escape hatch: only a negation directly
+beside it is admissible, because there is no wording in which this freeze is anything but
+unavailable.
+
+**Nothing could tell "closed" from "dispositioned".** The branch-risk table's entire content is that
+distinction — closed means a test exists *and was watched to fail under its mutation*; dispositioned
+means the branch cannot run, is kept as defence in depth or is recorded as inert, with an invariant
+pinning it instead. A line asserting ordinary coverage for the dispositioned ones passed every gate
+in the repository. Two rules now separate them, and the second refuses the unbounded form
+("all branches are closed") unless the line says which population was swept — because a claim about
+branches nobody enumerated is how §15 happened in the first place.
+
+Both gaps were found by mutating a claim and watching nothing happen. Neither was visible from a
+green run, and the freeze one had survived a pass written specifically to close it.
+
+## 22. Publish-candidate finalization: two defects that only the tarball could show
+
+The debris is gone, and with it the exemption that carried it. `probe-tmp.mjs` was deleted, the
+"exemption outlives the file" test failed on the very next run exactly as designed, and the entry was
+evicted. `KNOWN_DEBRIS` is now empty and a third test keeps it empty at release. All three were
+watched to fail under their own mutations.
+
+Everything else in this pass was found by packaging the thing and installing it, which no test over
+the source tree could have done.
+
+### Five MIT packages that shipped no licence
+
+`npm pack --dry-run` listed eight files per package: `README.md`, six `dist/*`, `package.json`. **No
+LICENSE.** Every manifest declares `"license": "MIT"`; npm auto-includes a licence only from the
+*package* directory, and it existed only at the repository root.
+
+`PUBLISHING.md` had carried *"LICENSE at the root and in each published package"* as a checklist line
+since the first release pass. It was read, ticked and wrong — a declared licence with no artifact
+behind it, which is the packaging form of a PROVEN claim with no test. Six packaging properties are
+tests now, each mutation-checked: licence declared *and shipped and listed in `files`*, README
+present, `files` limited to `dist`/`LICENSE`/`README`, no runtime dependency outside the scope (so
+`pg` cannot drift out of devDependencies), correct scope with `publishConfig.access: public` and a
+repository, and **one shared version across all five**, because they are released together and a
+skew lets a consumer resolve a combination nobody tested.
+
+### `npm pack` produces a tarball nobody can install
+
+The smoke test failed on `npm install` of its own tarballs:
+
+```
+npm error code EUNSUPPORTEDPROTOCOL
+npm error Unsupported URL Type "workspace:": workspace:*
+```
+
+The packages depend on each other by `workspace:*`. **`npm pack` copies that string in verbatim**;
+`pnpm pack` and `pnpm publish` rewrite it to the real version. So `npm pack --dry-run` is genuinely
+useful for reading the file list and actively misleading about installability: it can look perfect
+while describing something unpublishable.
+
+The trap is worth naming precisely because the dry run *succeeds*. It is the same shape as every
+defect in this file — a green check that measured something other than the thing it appeared to
+measure. `pnpm smoke:pack` now packs with `pnpm`, asserts no `workspace:` specifier survived into the
+tarball, installs offline into a throwaway directory, and runs the containment refusal **in both CJS
+and ESM**, because `exports` maps them separately and a broken `require` path is invisible to an
+ESM-only check.
+
+### What the smoke test is for
+
+Every other test in this repository runs against the source tree. A consumer gets a different file
+set, a different module resolution, and `files` deciding what exists. That gap is where both defects
+above lived, and neither was reachable from a green suite.

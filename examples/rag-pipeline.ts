@@ -16,9 +16,9 @@
 // BM25, and the winners flow into policy decisions carrying the provenance they were indexed with.
 // Nothing reads the text to decide.
 
-import { detect } from "@agent-containment/classifier";
-import { actionId, decide, sourceId } from "@agent-containment/core";
-import { buildIndex } from "@agent-containment/retrieval";
+import { detect } from "@agent-context-containment/classifier";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
+import { buildIndex } from "@agent-context-containment/retrieval";
 
 // ---------------------------------------------------------------------------------------------
 // A small corpus. One chunk is planted; two are ordinary; one is a security ticket that QUOTES an

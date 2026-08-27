@@ -10,7 +10,7 @@
 // quotes. A caveat in a comment protects nobody.
 
 import { join } from "node:path";
-import { classify } from "@agent-containment/classifier";
+import { classify } from "@agent-context-containment/classifier";
 import {
   type FrontierReport,
   PROFILES,
@@ -19,8 +19,8 @@ import {
   frontier,
   frontierClaims,
   loadSplit,
-} from "@agent-containment/conformance";
-import type { Split } from "@agent-containment/core";
+} from "@agent-context-containment/conformance";
+import type { Split } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "corpus");

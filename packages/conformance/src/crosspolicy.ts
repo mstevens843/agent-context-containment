@@ -10,7 +10,7 @@
 // `crosspolicy.test.ts` holds that structurally rather than by convention: it asserts the report
 // contains no aggregate row, and that the cell count equals profiles x splits exactly.
 
-import type { CorpusCase, Split } from "@agent-containment/core";
+import type { CorpusCase, Split } from "@agent-context-containment/core";
 import { type SplitMetrics, metricsFor } from "./compare.js";
 import type { ContainmentPolicy, TextClassifier } from "./ports.js";
 import { PROFILES, PROFILE_INTENT } from "./profiles.js";

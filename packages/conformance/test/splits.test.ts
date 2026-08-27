@@ -5,7 +5,7 @@
 // the four splits are never pooled.
 
 import { join } from "node:path";
-import { classify } from "@agent-containment/classifier";
+import { classify } from "@agent-context-containment/classifier";
 import { describe, expect, it } from "vitest";
 import {
   MUTANTS,

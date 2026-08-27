@@ -14,7 +14,7 @@
 // Reported side by side, never summed. A reader who wants one number is being invited to draw a
 // conclusion the corpus cannot support.
 
-import type { CorpusCase, Split } from "@agent-containment/core";
+import type { CorpusCase, Split } from "@agent-context-containment/core";
 import type { ContainmentPolicy, TextClassifier } from "./ports.js";
 import { runCorpus } from "./run.js";
 

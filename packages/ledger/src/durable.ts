@@ -26,7 +26,7 @@
 // reads-then-writes fails it. `durable.test.ts` includes a deliberately non-atomic store and asserts
 // it is rejected, because a proof that nothing can fail proves nothing.
 
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import type { LedgerGuarantees, ReceiptLedger, SpentRecord } from "./index.js";
 
 /**

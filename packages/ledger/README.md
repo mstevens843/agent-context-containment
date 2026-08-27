@@ -1,10 +1,10 @@
-# @agent-containment/ledger
+# @agent-context-containment/ledger
 
 The recommended entry point. Wraps the engine with a clock and a receipt ledger, so replay protection
 is not something a caller can forget.
 
 ```ts
-import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-containment/ledger"
+import { createGuard, lockingFileLedger, nodeLockingFs } from "@agent-context-containment/ledger"
 import fs from "node:fs"
 
 const guard = createGuard({
@@ -55,6 +55,6 @@ Three methods and the metadata block. Two of the three guarantees fail silently 
 the suite rather than reading a checklist:
 
 ```ts
-import { checkLedger, formatLedgerChecks } from "@agent-containment/ledger"
+import { checkLedger, formatLedgerChecks } from "@agent-context-containment/ledger"
 console.log(formatLedgerChecks(checkLedger(() => myRedisLedger())))
 ```

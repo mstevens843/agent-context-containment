@@ -28,7 +28,13 @@ const prose = (): { file: string; line: string; n: number }[] => {
   const out: { file: string; line: string; n: number }[] = [];
   const walk = (dir: string): void => {
     for (const name of readdirSync(dir)) {
-      if (["node_modules", ".git", "dist", ".turbo", "corpus"].includes(name)) continue;
+      // `corpus` was skipped ENTIRELY, to avoid walking 700 JSON case files. That took the
+      // attribution documents with it - and `corpus/imported/ATTRIBUTION.md` was carrying `6/6` and
+      // `4/6` three versions after they became `17/17` and `9/17`. An unscanned document with stale
+      // release numbers, invisible to every check in the repository.
+      //
+      // Found by asking which documents the walker actually reaches. Skip the noise, not the prose.
+      if (["node_modules", ".git", "dist", ".turbo"].includes(name)) continue;
       const p = join(dir, name);
       if (statSync(p).isDirectory()) {
         walk(p);
@@ -164,11 +170,75 @@ describe("no document asserts more than the evidence supports", () => {
     for (const { file, line, n } of lines) {
       if (line.includes(EXEMPT)) continue;
       if (!/freeze/i.test(line)) continue;
+      // `pending` is here because STATUS.md said "Git-object freeze: STILL PENDING" for four
+      // versions and this rule walked straight past it - it only looked for PROOF words, and
+      // "pending" is the opposite claim: not that a proof exists, but that one is coming. The
+      // project's commitment is that the ordering claim is UNAVAILABLE, so "pending" is precisely
+      // the word that must never appear about it.
+      // `pending` IS CHECKED SEPARATELY, AND WITHOUT THE ESCAPE HATCH BELOW.
+      //
+      // A v1.0-rc adversarial run put "STILL PENDING" back into the STATUS row and this rule let it
+      // through: the same row also says "Attempted and correctly rejected", and the escape clause
+      // `/unavailable|attempted|failed|.../` matches ANYWHERE ON THE LINE. So the sentence that
+      // makes the claim honest was also the sentence that excused the claim that makes it dishonest.
+      // §18 added `pending` to the word list and this is the half that was still missing.
+      //
+      // There is no wording in which the freeze is pending. It is UNAVAILABLE. Only a negation
+      // directly beside the word - "not pending" - is admissible, and nothing else on the line can
+      // buy it. See DEFECTS_FOUND.md §21.
+      if (/\bpending\b/i.test(line)) {
+        expect(
+          negatedNear(line, /\bpending\b/i),
+          `${file}:${n} calls the freeze pending. It is UNAVAILABLE - a proof that will never be obtained, not one that is coming:\n    ${line.trim()}`,
+        ).toBe(true);
+      }
       if (!/\b(proven|proof|cashed|obtained|established)\b/i.test(line)) continue;
       expect(
         negatedNear(line, /\b(proven|proof|cashed|obtained|established)\b/i) ||
           /unavailable|attempted|failed|would|to cash/i.test(line),
         `${file}:${n} asserts a freeze proof exists:\n    ${line.trim()}`,
+      ).toBe(true);
+    }
+  });
+
+  it("no line describes a dispositioned branch as covered by ordinary tests", () => {
+    // THE RULE A v1.0-rc ADVERSARIAL RUN NEEDED AND DID NOT FIND.
+    //
+    // `STATUS.md` was mutated to say "All branches including the unreachable ones are covered by
+    // ordinary tests and proven closed" - and every gate passed. Nothing in this repository could
+    // tell the difference between a branch CLOSED (a test exists and was watched to fail under its
+    // mutation) and a branch DISPOSITIONED (unreachable, kept as defence in depth or recorded-dead,
+    // with an invariant pinning it instead).
+    //
+    // That distinction is the entire content of the branch-risk table. Blurring it is how "we
+    // reviewed it" becomes "it is tested", which is the §15 sentence one level up. So: a line that
+    // talks about unreachable or dead branches may NOT also claim ordinary coverage for them.
+    //
+    // See DEFECTS_FOUND.md §21.
+    const COVERAGE =
+      /\b(covered by ordinary tests|proven closed|ordinary coverage|fully covered)\b/i;
+    for (const { file, line, n } of lines) {
+      if (line.includes(EXEMPT)) continue;
+      if (!/\b(unreachable|recorded-dead|dead branch|inert)\b/i.test(line)) continue;
+      if (!COVERAGE.test(line)) continue;
+      expect(
+        negatedNear(line, COVERAGE),
+        `${file}:${n} describes an unreachable or dead branch as ordinarily covered. It is DISPOSITIONED - an invariant pins it, no ordinary test reaches it - and the difference is the whole point of the branch-risk table:\n    ${line.trim()}`,
+      ).toBe(true);
+    }
+  });
+
+  it("no line claims every branch is closed", () => {
+    // The unbounded version of the same overstatement. The commitment is specific and countable:
+    // zero unguarded branches remain, and two are dispositioned. "All branches are closed" is a
+    // claim about branches nobody has swept, which is exactly how §15 happened.
+    for (const { file, line, n } of lines) {
+      if (line.includes(EXEMPT)) continue;
+      if (!/\b(all|every)\s+branch(es)?\b/i.test(line)) continue;
+      if (!/\b(closed|covered|proven|tested)\b/i.test(line)) continue;
+      expect(
+        /unguarded|the 30|swept|found unprotected|dispositioned/i.test(line),
+        `${file}:${n} claims every branch is closed without saying which population it swept:\n    ${line.trim()}`,
       ).toBe(true);
     }
   });

@@ -27,7 +27,7 @@
 // and the report says so on the same line, because an unqualified "optimal" is the most quotable and
 // least defensible thing this repository could produce. See docs/POLICY_CHOICE.md.
 
-import type { CorpusCase, Split } from "@agent-containment/core";
+import type { CorpusCase, Split } from "@agent-context-containment/core";
 import type { ContainmentPolicy, TextClassifier } from "./ports.js";
 import { PROFILES, PROFILE_INTENT } from "./profiles.js";
 import { runCorpus } from "./run.js";

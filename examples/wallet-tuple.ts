@@ -14,7 +14,7 @@ import {
   admitNumericEnvelope,
   decide,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 const SCOPE = { nonce: "demo", issuedAt: 0, expiresAt: null, source: null } as const;
 

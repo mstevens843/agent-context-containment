@@ -15,8 +15,8 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadSplit } from "@agent-containment/conformance";
-import { type CorpusCase, checkCorpus } from "@agent-containment/core";
+import { loadSplit } from "@agent-context-containment/conformance";
+import { type CorpusCase, checkCorpus } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 
 const REPO = join(import.meta.dirname, "..", "..", "..");

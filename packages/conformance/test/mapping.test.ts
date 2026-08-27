@@ -17,8 +17,8 @@ import {
   formatSensitivity,
   loadSplit,
   sensitivity,
-} from "@agent-containment/conformance";
-import { ALL_CAPABILITIES, CAPABILITY_POLICY } from "@agent-containment/core";
+} from "@agent-context-containment/conformance";
+import { ALL_CAPABILITIES, CAPABILITY_POLICY } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(__dirname, "../../../corpus");

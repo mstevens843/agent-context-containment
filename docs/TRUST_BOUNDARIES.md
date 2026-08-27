@@ -68,7 +68,7 @@ and enters no table. If it were deleted, every number in this repository would b
 |---|---|---|
 | **PROVEN** | a test fails if it stops being true, and a negative control shows the test can fail | the receipt binds to one slot |
 | **ADAPTER-PROVEN** | the code is right; says nothing about any deployment | the async reservation protocol against UNIQUE semantics |
-| **PROVEN against a real database** | ran against a live Postgres, with a negative control that must double-claim | `DATABASE_URL=… pnpm prove:postgres`, 11/11 |
+| **PROVEN against a real database** | ran against a live Postgres, with a negative control that must double-claim — **and proves it for that database, that version and that topology only.** Not for Postgres in general, and not for your deployment | `DATABASE_URL=… pnpm prove:postgres`, 11/11 |
 | **SKIPPED / NOT PROVEN** | not checked on this run. **Never reported as a pass** | that same proof without `DATABASE_URL` |
 | **DELEGATED TO CALLER** | outside what the engine can see | whether your hosts share one database |
 

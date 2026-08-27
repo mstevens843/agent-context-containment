@@ -11,7 +11,7 @@
 // a receipt that gets spent twice. And they check that a deployment can state its requirement in
 // code and get a startup failure rather than a quiet regression.
 
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import {
   checkLedger,
   createGuard,
@@ -20,7 +20,7 @@ import {
   lockingFileLedger,
   memoryLedger,
   twoHostSimulation,
-} from "@agent-containment/ledger";
+} from "@agent-context-containment/ledger";
 import { describe, expect, it } from "vitest";
 
 /** An in-memory `LockingFs`, so the locking adapter can be exercised with no disk. */

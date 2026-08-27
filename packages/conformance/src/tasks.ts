@@ -20,9 +20,9 @@
 // so these are scripted step sequences rather than agent runs. It is a step closer, and the gap is
 // stated rather than papered over.
 
-import type { Capability, ParamRole, Provenance, Source } from "@agent-containment/core";
-import { actionId, decide, sourceId } from "@agent-containment/core";
-import type { ReceiptEvidence } from "@agent-containment/core";
+import type { Capability, ParamRole, Provenance, Source } from "@agent-context-containment/core";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
+import type { ReceiptEvidence } from "@agent-context-containment/core";
 
 /** One step of a task. */
 export interface TaskStep {

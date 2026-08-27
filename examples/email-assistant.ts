@@ -8,7 +8,7 @@
 // send it to Alice", the ordinary use of an email assistant. That is how a containment library gets
 // deleted in week three.
 
-import { actionId, decide, sourceId } from "@agent-containment/core";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
 
 const sources = [
   { id: sourceId("task"), provenance: "USER" as const },

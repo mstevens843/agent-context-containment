@@ -13,7 +13,7 @@
 // advertisement.
 
 import { join } from "node:path";
-import { classify } from "@agent-containment/classifier";
+import { classify } from "@agent-context-containment/classifier";
 import {
   type CrossPolicyReport,
   PROFILES,
@@ -23,8 +23,8 @@ import {
   loadSplit,
   permissiveProfile,
   strictProfile,
-} from "@agent-containment/conformance";
-import { ALL_CAPABILITIES, CAPABILITY_POLICY, type Split } from "@agent-containment/core";
+} from "@agent-context-containment/conformance";
+import { ALL_CAPABILITIES, CAPABILITY_POLICY, type Split } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "corpus");

@@ -13,7 +13,7 @@
 // inspect removes the review step instead of protecting anything. That was defect §7 in
 // docs/DEFECTS_FOUND.md, and it took reading the whole policy grid to see.
 
-import { admitUserConfirmedValue, sourceId } from "@agent-containment/core";
+import { admitUserConfirmedValue, sourceId } from "@agent-context-containment/core";
 import { type Demo, runDemo } from "./harness.js";
 
 const TOKEN_METADATA = `{"name":"USD Coin","symbol":"USDC","decimals":6,

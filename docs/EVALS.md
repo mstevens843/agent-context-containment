@@ -278,7 +278,7 @@ tuning instead.
 Implement one method:
 
 ```ts
-import { defineContainmentSuite } from "@agent-containment/conformance";
+import { defineContainmentSuite } from "@agent-context-containment/conformance";
 
 const myPolicy = {
   name: "ours",

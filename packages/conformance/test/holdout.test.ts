@@ -2,7 +2,7 @@
 // checks that the suite discriminates rather than blanket-failing.
 
 import { join } from "node:path";
-import { classify } from "@agent-containment/classifier";
+import { classify } from "@agent-context-containment/classifier";
 import { describe, expect, it } from "vitest";
 import { MUTANTS, formatReport, loadSplit, reference, runCorpus } from "../src/index.js";
 

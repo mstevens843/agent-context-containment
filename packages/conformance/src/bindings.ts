@@ -9,7 +9,7 @@
 // agents. Payments appear as ONE high-risk row among many and are not the centre of anything here -
 // a containment model that only worked on money would not be containment.
 
-import type { ToolBinding } from "@agent-containment/core";
+import type { ToolBinding } from "@agent-context-containment/core";
 
 /** What a careful author writes. Every one of these should produce no advisory. */
 export const HONEST_BINDINGS: readonly ToolBinding[] = [

@@ -10,7 +10,7 @@
 // The receipt at the end is the release valve. A human was shown one exact address and confirmed it,
 // so that one address is admitted - for that one argument, on that one capability, once.
 
-import { admitUserConfirmedValue, sourceId } from "@agent-containment/core";
+import { admitUserConfirmedValue, sourceId } from "@agent-context-containment/core";
 import { type Demo, runDemo } from "./harness.js";
 
 const INBOX = `From: billing@vendor-northwind.example

@@ -1,6 +1,6 @@
 {
-  "name": "@agent-containment/retrieval",
-  "version": "0.0.1",
+  "name": "@agent-context-containment/retrieval",
+  "version": "0.1.0",
   "description": "A dependency-free lexical (BM25) retriever that carries chunk provenance through into the policy check. Lexical only - no embeddings, no semantic claim.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -28,7 +28,7 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
@@ -37,6 +37,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-containment/core": "workspace:*"
+    "@agent-context-containment/core": "workspace:*"
   }
 }

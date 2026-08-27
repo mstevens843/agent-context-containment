@@ -28,8 +28,8 @@ import type {
   ReceiptEvidence,
   Source,
   Verdict,
-} from "@agent-containment/core";
-import { actionId, decide, sourceId } from "@agent-containment/core";
+} from "@agent-context-containment/core";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
 
 /** Something the agent tries to do. */
 export interface PlannedStep {

@@ -48,6 +48,20 @@ if (!blocks.ok) {
   );
 }
 
+process.stdout.write("  hand-typed numbers agree with the code    ");
+const numbers = run("node scripts/verify-numbers.mjs");
+console.log(numbers.ok ? "OK" : "STALE");
+if (!numbers.ok) {
+  problems++;
+  console.log(
+    numbers.out
+      .split("\n")
+      .filter((l) => l.includes("STALE") || l.includes("says"))
+      .map((l) => `    ${l.trim()}`)
+      .join("\n"),
+  );
+}
+
 process.stdout.write("  claim registry rules                      ");
 const registry = run("npx vitest run packages/conformance/test/claimregistry.test.ts");
 console.log(registry.ok ? "OK" : "FAILED");

@@ -13,7 +13,7 @@
 //   untrusted text, so novel phrasing cannot degrade it. A flat tuning-to-holdout line for
 //   containment is a PREDICTION OF THE ARCHITECTURE, not evidence that it generalises.
 
-import type { CorpusCase } from "@agent-containment/core";
+import type { CorpusCase } from "@agent-context-containment/core";
 import type { ContainmentPolicy, TextClassifier } from "./ports.js";
 import { requestOf } from "./ports.js";
 

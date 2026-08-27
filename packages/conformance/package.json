@@ -1,6 +1,6 @@
 {
-  "name": "@agent-containment/conformance",
-  "version": "0.0.1",
+  "name": "@agent-context-containment/conformance",
+  "version": "0.1.0",
   "description": "Runnable containment eval suite over the attack corpus, with deliberately broken policy engines that prove the suite discriminates.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -28,7 +28,7 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
@@ -37,8 +37,8 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-containment/classifier": "workspace:*",
-    "@agent-containment/core": "workspace:*",
-    "@agent-containment/ledger": "workspace:*"
+    "@agent-context-containment/classifier": "workspace:*",
+    "@agent-context-containment/core": "workspace:*",
+    "@agent-context-containment/ledger": "workspace:*"
   }
 }

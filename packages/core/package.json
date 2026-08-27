@@ -1,6 +1,6 @@
 {
-  "name": "@agent-containment/core",
-  "version": "0.0.1",
+  "name": "@agent-context-containment/core",
+  "version": "0.1.0",
   "description": "Containment instead of classification for prompt injection: a provenance/taint lattice, a two-axis capability model, and a pure deterministic policy engine. Zero dependencies.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -28,7 +28,7 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",

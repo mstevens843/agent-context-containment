@@ -24,7 +24,7 @@ import {
   decide,
   formatManifestFindings,
   validatePolicy,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import type { ContainmentPolicy, ContainmentRequest, ContainmentResponse } from "./ports.js";
 
 /** The lattice as ordinals, so "one notch tighter" is arithmetic rather than a table of cases. */

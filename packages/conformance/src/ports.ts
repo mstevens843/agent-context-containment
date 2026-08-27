@@ -18,7 +18,7 @@ import {
   admitNumericEnvelope,
   admitUserConfirmedValue,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 /** Everything the policy is allowed to see. */
 export interface ContainmentRequest {

@@ -15,7 +15,7 @@
 //
 // `recallAt` is here so the retrieval quality claim is a measured number rather than an adjective.
 
-import type { Provenance, SourceId } from "@agent-containment/core";
+import type { Provenance, SourceId } from "@agent-context-containment/core";
 
 /** One indexed unit of text, carrying where it came from. */
 export interface Chunk {

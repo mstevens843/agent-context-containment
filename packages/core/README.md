@@ -1,13 +1,13 @@
-# @agent-containment/core
+# @agent-context-containment/core
 
 The policy engine. Zero dependencies, zero I/O, zero randomness — a contract test fails the build if
 this package grows an import, a clock, a `Promise`, or a hard-coded threshold.
 
 ```ts
-import { decide, actionId, sourceId } from "@agent-containment/core"
+import { decide, actionId, sourceId } from "@agent-context-containment/core"
 ```
 
-**Most callers should not use this directly.** Use `@agent-containment/ledger`'s `createGuard`, which
+**Most callers should not use this directly.** Use `@agent-context-containment/ledger`'s `createGuard`, which
 supplies the two arguments whose omission silently disables replay protection. The raw engine is
 exported for three cases: writing a checker, replaying an audit log against a past policy, and
 testing. See `docs/INTEGRATION.md`.

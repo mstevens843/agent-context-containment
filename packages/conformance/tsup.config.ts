@@ -8,5 +8,5 @@ export default defineConfig({
   clean: true,
   treeshake: true,
   target: "es2022",
-  external: ["@agent-containment/core", "@agent-containment/classifier", "vitest"],
+  external: ["@agent-context-containment/core", "@agent-context-containment/classifier", "vitest"],
 });

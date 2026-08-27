@@ -51,7 +51,7 @@ pnpm verify:manifests        # every table in the repo, plus a diff of each prof
 ```
 
 ```ts
-import { validatePolicy, contradictions } from "@agent-containment/core"
+import { validatePolicy, contradictions } from "@agent-context-containment/core"
 
 const bad = contradictions(validatePolicy(myPolicy))
 if (bad.length > 0) throw new Error(...)   // at startup, never inside decide()
@@ -102,7 +102,7 @@ one-word edit — `CLEAN` to `TOOL_DERIVED` on one role of one row — is the sm
 disables containment for a capability, and it looks like nothing in a pull request.**
 
 ```ts
-import { diffPolicies, formatPolicyDiff } from "@agent-containment/core"
+import { diffPolicies, formatPolicyDiff } from "@agent-context-containment/core"
 console.log(formatPolicyDiff(diffPolicies(before, after)))
 ```
 

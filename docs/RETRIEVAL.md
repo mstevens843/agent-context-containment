@@ -28,7 +28,7 @@ demo prints both halves against the classifier to show neither fires.
 
 ## What the retrieval package is, and is not
 
-`@agent-containment/retrieval` is BM25 over tokenised terms, about 150 lines, zero dependencies. It
+`@agent-context-containment/retrieval` is BM25 over tokenised terms, about 150 lines, zero dependencies. It
 strips one trailing plural `s` and that is the whole of its normalisation — it is **not a stemmer**,
 `policies` does not match `policy`, and `running` does not match `run`. Those are real misses, stated
 rather than hidden, and `recallAt` exists so the quality claim is a measured number over a named

@@ -6,7 +6,7 @@
 // but what the RUN looked like afterwards. A refusal that kills the run is a different product from a
 // refusal that stops one step.
 
-import { sourceId } from "@agent-containment/core";
+import { sourceId } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import {
   HAND_WRITTEN_SCENARIOS,

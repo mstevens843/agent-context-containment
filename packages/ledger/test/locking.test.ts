@@ -10,7 +10,7 @@ import {
   actionId,
   admitUserConfirmedValue,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import {
   LedgerLockError,

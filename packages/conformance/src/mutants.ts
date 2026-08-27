@@ -14,8 +14,13 @@
 //
 // The house verb for a check that fires is "bites".
 
-import { detect } from "@agent-containment/classifier";
-import { CAPABILITY_POLICY, type CapabilityPolicy, decide, slotsOf } from "@agent-containment/core";
+import { detect } from "@agent-context-containment/classifier";
+import {
+  CAPABILITY_POLICY,
+  type CapabilityPolicy,
+  decide,
+  slotsOf,
+} from "@agent-context-containment/core";
 import type { ContainmentPolicy, ContainmentRequest, ContainmentResponse } from "./ports.js";
 
 /** The real engine. Passes everything; the control at the other end. */

@@ -107,11 +107,19 @@ describe("cross-domain agent demos", () => {
   it("the engine contains no domain vocabulary", () => {
     // The load-bearing test for the generality claim. If the policy table ever learns what a refund
     // or a deploy is, the four demos stop being evidence of anything.
-    const policy = readFileSync(join(REPO, "packages", "core", "src", "policy.ts"), "utf8");
-    const code = policy
-      .split("\n")
-      .filter((l) => !l.trimStart().startsWith("*") && !l.trimStart().startsWith("//"))
-      .join("\n");
+    //
+    // SCOPE, AND WHY IT IS THE WHOLE PACKAGE NOW. Until v1.0 this read ONE file, policy.ts, while
+    // `docs/claims.json` and README both said "anywhere in its code". An adversarial reviewer
+    // appended `export const X = "deploy"` to check.ts and the full suite passed 461/461. The claim
+    // was broader than its evidence in exactly the §17 shape, so the scan now walks every source
+    // file in the core package. See DEFECTS_FOUND.md §19.
+    const SRC = join(REPO, "packages", "core", "src");
+    const strip = (text: string): string =>
+      text
+        .split("\n")
+        .filter((l) => !l.trimStart().startsWith("*") && !l.trimStart().startsWith("//"))
+        .join("\n");
+
     // WHAT THIS LIST IS AND IS NOT. These are business-domain terms whose presence would mean the
     // engine branches on a domain. `wallet` is deliberately NOT here: `wallet_sign` is a capability
     // name, it appears four times in policy.ts, and the claim is about the engine not special-casing
@@ -120,10 +128,46 @@ describe("cross-domain agent demos", () => {
     //
     // An adversarial audit caught `docs/claims.json` asserting "no wallet" against a list that never
     // scanned for it. The test was right; the claim about the test was not. See DEFECTS_FOUND.md §17.
-    for (const word of ["refund", "ticket", "deploy", "kubernetes", "invoice", "solana", "USDC"]) {
+    const DOMAIN = ["refund", "ticket", "deploy", "kubernetes", "invoice", "solana", "USDC"];
+
+    // THE ONE EXEMPTION, WRITTEN DOWN. `toolrisk.ts` is an advisory naming heuristic: it reads tool
+    // NAMES and asks whether they look like the capability they were bound to. Its vocabulary is
+    // English mutating verbs - `delete`, `pay`, `publish` - and `deploy` and `refund` sit in that
+    // list as verbs, not as domains. It is exempt for those two words ONLY, and the exemption is
+    // asserted below rather than assumed, so it cannot quietly widen to cover a real domain leak.
+    const EXEMPT_FILE = "toolrisk.ts";
+    const EXEMPT_WORDS = new Set(["deploy", "refund"]);
+
+    for (const file of readdirSync(SRC).filter((f) => f.endsWith(".ts"))) {
+      const code = strip(readFileSync(join(SRC, file), "utf8"));
+      for (const word of DOMAIN) {
+        if (file === EXEMPT_FILE && EXEMPT_WORDS.has(word)) continue;
+        expect(
+          new RegExp(word, "i").test(code),
+          `packages/core/src/${file} mentions "${word}" - the engine has learned a domain`,
+        ).toBe(false);
+      }
+    }
+  });
+
+  it("the domain-vocabulary exemption describes a file that really is advisory", () => {
+    // An exemption is a hole. This test is the lid: if `toolrisk.ts` stops containing the two verbs,
+    // the exemption is stale and must be deleted rather than left as a standing permission. And if
+    // `decide()` ever starts consulting it, the "advisory, never a decision" justification for the
+    // exemption evaporates and the generality claim has to be rewritten, not re-exempted.
+    const toolrisk = readFileSync(join(REPO, "packages", "core", "src", "toolrisk.ts"), "utf8");
+    for (const word of ["deploy", "refund"]) {
       expect(
-        new RegExp(word, "i").test(code),
-        `the policy engine's code mentions "${word}" - it has learned a domain`,
+        toolrisk.includes(`"${word}"`),
+        `toolrisk.ts no longer contains "${word}" - delete the exemption instead of carrying it`,
+      ).toBe(true);
+    }
+    // The justification is that nothing on the decision path imports it.
+    for (const file of ["policy.ts", "declassify.ts", "taint.ts", "check.ts"]) {
+      const code = readFileSync(join(REPO, "packages", "core", "src", file), "utf8");
+      expect(
+        /from\s+"\.\/toolrisk\.js"/.test(code),
+        `${file} imports toolrisk - it is no longer advisory, so the exemption is no longer honest`,
       ).toBe(false);
     }
   });

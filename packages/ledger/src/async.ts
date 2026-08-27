@@ -32,7 +32,7 @@
 // and a slow-but-alive caller loses its reservation. There is no setting that is free, and the
 // adapter says so in its own caveat rather than leaving it for someone to find.
 
-import type { ReceiptId, Verdict } from "@agent-containment/core";
+import type { ReceiptId, Verdict } from "@agent-context-containment/core";
 import type { ContainmentInput, LedgerGuarantees, SpentRecord } from "./index.js";
 import { decideWithSpent } from "./index.js";
 

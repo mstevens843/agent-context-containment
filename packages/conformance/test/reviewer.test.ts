@@ -14,7 +14,7 @@ import {
   type ReviewRequest,
   render,
   review,
-} from "@agent-containment/conformance";
+} from "@agent-context-containment/conformance";
 import { describe, expect, it } from "vitest";
 
 const field = (

@@ -19,6 +19,7 @@ import {
   fromUser,
   fromWeb,
   ingestionCoverage,
+  sourceId,
 } from "../src/index.js";
 
 describe("ingestion declares, it does not infer", () => {
@@ -175,5 +176,77 @@ describe("ingestion coverage", () => {
     // edge can hide.
     expect(ingestionCoverage(3, 3).note).toContain("every source");
     expect(ingestionCoverage(1, 3).note).toContain("2 source(s) were built by hand");
+  });
+});
+
+describe("contextOf is WIRING VALIDATION, not a security membrane", () => {
+  // Found by an adversarial pass asking what malformed contexts it ACCEPTS. The answer is: several -
+  // and none of them is a hazard, because the ENGINE fails closed on all of them. That division of
+  // labour existed only in prose, which is how a reader ends up believing that passing `contextOf`
+  // makes a context safe.
+  //
+  // These tests pin both halves: what the helper does not check, and what catches it instead. If the
+  // second half ever stops being true, the first half becomes a real hole.
+
+  const decideOn = (sources: readonly { id: unknown }[], from: string) =>
+    advanced.decide({
+      action: {
+        id: actionId("a"),
+        capability: "email_send",
+        tool: "smtp.send",
+        args: [{ name: "to", role: "sink_identity", derivedFrom: [sourceId(from)] }],
+      },
+      sources: sources as never,
+    });
+
+  it("accepts a self-referential edge, and the engine fails closed on it", () => {
+    const { sources } = contextOf([fromUser("task", "x"), derivedOutput("a", "y", ["a"])]);
+    expect(sources.length, "contextOf refused a self-cycle - update this test, not the docs").toBe(
+      2,
+    );
+    expect(
+      decideOn(sources, "a").decision,
+      "a self-referential edge resolved to something permissive - that is a laundering path",
+    ).not.toBe("ALLOW");
+  });
+
+  it("accepts a two-node cycle, and the engine fails closed on it", () => {
+    const { sources } = contextOf([derivedOutput("a", "x", ["b"]), derivedOutput("b", "y", ["a"])]);
+    expect(sources.length).toBe(2);
+    expect(decideOn(sources, "a").decision).not.toBe("ALLOW");
+  });
+
+  it("accepts an edge that points at a source declared later", () => {
+    // Declaration order is not resolution order, and it should not be. Asserted so nobody adds an
+    // ordering rule that breaks a legitimate context.
+    const { sources } = contextOf([derivedOutput("a", "x", ["b"]), fromWeb("b", "y")]);
+    expect(sources.length).toBe(2);
+    expect(decideOn(sources, "a").decision).not.toBe("ALLOW");
+  });
+
+  it("accepts ids differing only by case, because they ARE different ids", () => {
+    // Not a hazard - `Page` and `page` are distinct sources - but worth pinning so the duplicate-id
+    // check is not later "improved" into a case-insensitive one that rejects a legitimate context.
+    expect(() => contextOf([fromWeb("Page", "x"), fromUser("page", "y")])).not.toThrow();
+  });
+
+  it("accepts a tool output with NO edge, which is the mistake derivedOutput exists to prevent", () => {
+    // `contextOf` cannot tell an independent tool result from a laundered one - both are a
+    // TOOL_OUTPUT with no declared input. Only the caller knows, which is exactly why this is wiring
+    // validation and not a membrane.
+    expect(() => contextOf([fromWeb("page", "x"), fromToolOutput("summary", "y")])).not.toThrow();
+    const { sources } = contextOf([fromWeb("page", "x"), fromToolOutput("summary", "y")]);
+    expect(
+      sources.find((s) => String(s.id) === "summary")?.derivedFrom,
+      "an edge appeared from nowhere - contextOf must not invent provenance",
+    ).toBeUndefined();
+  });
+
+  it("the three things it DOES refuse are the three that fail open", () => {
+    // The distinction that makes the check worth having: a dangling edge, a duplicate id and an empty
+    // id all read as CLEAN or shadow another source. Everything it accepts fails CLOSED instead.
+    expect(() => contextOf([derivedOutput("a", "x", ["nowhere"])])).toThrow(IngestError);
+    expect(() => contextOf([fromWeb("p", "x"), fromUser("p", "y")])).toThrow(IngestError);
+    expect(() => contextOf([fromWeb("", "x")])).toThrow(IngestError);
   });
 });

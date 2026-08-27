@@ -1,4 +1,4 @@
-# @agent-containment/classifier
+# @agent-context-containment/classifier
 
 A prompt-injection text detector, **ported intact from a production agent wallet** — 267 lines, 13
 frozen regex patterns, Apache-2.0 in origin.
@@ -19,4 +19,4 @@ to lose.
 Neither is fixed by a better detector. That is the argument the rest of the repository makes.
 
 If you want detection, this package is the wrong dependency — take the patterns and own them. If you
-want containment, see `@agent-containment/ledger`.
+want containment, see `@agent-context-containment/ledger`.

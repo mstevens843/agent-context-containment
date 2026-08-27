@@ -38,7 +38,7 @@ import {
   actionId,
   advanced,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 /** One case's grading, as recorded in MAPPING.json. */
 export interface CaseMapping {

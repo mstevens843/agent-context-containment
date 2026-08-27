@@ -5,7 +5,7 @@
 // "not ALLOW" to a decision-level number, and to a user they are the difference between "it asked me
 // first" and "it did nothing and I do not know why".
 
-import { admitUserConfirmedValue } from "@agent-containment/core";
+import { admitUserConfirmedValue } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import { type Task, formatTasks, runTask, runTasks } from "../src/index.js";
 

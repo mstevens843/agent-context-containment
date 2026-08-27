@@ -17,8 +17,8 @@
 // these fails, the published number is wrong, not the labelling philosophy.
 
 import { join } from "node:path";
-import { classify, detect } from "@agent-containment/classifier";
-import { loadSplit } from "@agent-containment/conformance";
+import { classify, detect } from "@agent-context-containment/classifier";
+import { loadSplit } from "@agent-context-containment/conformance";
 import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..", "..", "..", "corpus");

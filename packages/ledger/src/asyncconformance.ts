@@ -12,7 +12,7 @@
 // real database covers the rest, and nothing in this repository can cover your deployment topology.
 // Each of those three is a different claim and this file only makes the first.
 
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import type { AsyncReceiptLedger } from "./async.js";
 
 export interface AsyncCheck {

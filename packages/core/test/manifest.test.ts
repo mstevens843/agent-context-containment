@@ -212,4 +212,127 @@ describe("manifest diff", () => {
       diffPolicies(CAPABILITY_POLICY, p).some((c) => c.what === "tuplePolicies" && c.loosening),
     ).toBe(true);
   });
+
+  // ---- THE FIVE SUSPICION RULES NOBODY WAS TESTING -----------------------------------------------
+  //
+  // Seven contradiction rules each had a named test. Of six suspicion rules, only HIGH_BLAST_RADIUS
+  // did; the other five were held up by `findings.length > 0` alone - a floor the shipped table
+  // clears several times over, so deleting any one rule was invisible. Two of them delete findings
+  // the SHIPPED table produces, and `pnpm verify:manifests` still said OK.
+  //
+  // Each rule gets a POSITIVE case (a policy that trips it) and a BENIGN NEAR-MISS that must stay
+  // quiet, because a rule that fires on everything is as useless as one that fires on nothing - and
+  // a near-miss is the only thing that proves the predicate is narrow rather than the assertion
+  // merely restating the rule text. See DEFECTS_FOUND.md §20.
+
+  it("catches a role rated looser than the row's own default", () => {
+    const p = clone();
+    row(p, "email_send").defaultCeiling = "CLEAN";
+    (row(p, "email_send").roleCeilings as Record<string, unknown>).payload = "UNTRUSTED_EXTERNAL";
+    expect(validatePolicy(p).map((f) => f.code)).toContain("ROLE_LOOSER_THAN_DEFAULT");
+  });
+
+  it("...and stays quiet when the role is at or below the default", () => {
+    // The near-miss: EQUAL is not looser. A rule that fired here would flag most honest tables.
+    const p = clone();
+    row(p, "email_send").defaultCeiling = "USER_CONTROLLED";
+    (row(p, "email_send").roleCeilings as Record<string, unknown>).payload = "USER_CONTROLLED";
+    const flagged = validatePolicy(p).filter(
+      (f) => f.code === "ROLE_LOOSER_THAN_DEFAULT" && f.capability === "email_send",
+    );
+    expect(flagged.length, "a role EQUAL to the default was reported as looser").toBe(0);
+  });
+
+  it("catches a steering role that admits TOOL_DERIVED on a capability that acts", () => {
+    // This is the invariant `policy.ts` says will fire if the mixed-provenance band ever reopens.
+    // That promise was kept only by a describe() block over the one shipped constant - and
+    // `decide(input, policy)` accepts any policy, which is the whole reason this file exists.
+    const p = clone();
+    (row(p, "email_send").roleCeilings as Record<string, unknown>).sink_identity = "TOOL_DERIVED";
+    expect(validatePolicy(p).map((f) => f.code)).toContain("STEERING_ADMITS_TOOL_DERIVED");
+  });
+
+  it("...and stays quiet on an inert row, where a loose steering role steers nothing", () => {
+    // The near-miss that matters: `effect: "none"` with no egress cannot be steered into harm, so
+    // the same ceiling there is not the same risk. If this fired, every read-only row would be noise.
+    const p = clone();
+    const findings = validatePolicy(p).filter(
+      (f) => f.code === "STEERING_ADMITS_TOOL_DERIVED" && f.capability === "text_response",
+    );
+    expect(
+      findings.length,
+      "an inert row was flagged for a steering ceiling it cannot act on",
+    ).toBe(0);
+  });
+
+  it("catches an irreversible capability that asks for no confirmation", () => {
+    const p = clone();
+    row(p, "transaction_broadcast").requiresConfirmation = false;
+    const flagged = validatePolicy(p).filter(
+      (f) =>
+        f.code === "IRREVERSIBLE_WITHOUT_CONFIRMATION" && f.capability === "transaction_broadcast",
+    );
+    expect(flagged.length).toBeGreaterThan(0);
+  });
+
+  it("...and stays quiet on a reversible capability that asks for none", () => {
+    const p = clone();
+    row(p, "file_write").effect = "reversible";
+    row(p, "file_write").requiresConfirmation = false;
+    const flagged = validatePolicy(p).filter(
+      (f) => f.code === "IRREVERSIBLE_WITHOUT_CONFIRMATION" && f.capability === "file_write",
+    );
+    expect(flagged.length, "a REVERSIBLE row was flagged for skipping confirmation").toBe(0);
+  });
+
+  it("catches a draft that also demands confirmation - two asks for one artifact", () => {
+    const p = clone();
+    row(p, "transaction_prepare").draftOnly = true;
+    row(p, "transaction_prepare").requiresConfirmation = true;
+    expect(validatePolicy(p).map((f) => f.code)).toContain("DRAFT_REQUIRING_CONFIRMATION");
+  });
+
+  it("...and stays quiet on a draft that does not", () => {
+    const p = clone();
+    row(p, "transaction_prepare").draftOnly = true;
+    row(p, "transaction_prepare").requiresConfirmation = false;
+    const flagged = validatePolicy(p).filter(
+      (f) => f.code === "DRAFT_REQUIRING_CONFIRMATION" && f.capability === "transaction_prepare",
+    );
+    expect(flagged.length, "an ordinary draft row was flagged").toBe(0);
+  });
+
+  it("catches a steering ceiling no rule can lift - a flat DENY with no route to approval", () => {
+    const p = clone();
+    (row(p, "email_send").liftableBy as Set<string>).clear();
+    expect(validatePolicy(p).map((f) => f.code)).toContain("UNLIFTABLE_STEERING_CEILING");
+  });
+
+  it("...and stays quiet where the ceiling is already at the top of the lattice", () => {
+    // The near-miss: an unliftable row whose steering roles admit everything has no refusal to
+    // route around, so there is no availability problem to report. Correct for a signing key.
+    const p = clone();
+    (row(p, "email_send").liftableBy as Set<string>).clear();
+    const rc = row(p, "email_send").roleCeilings as Record<string, unknown>;
+    for (const k of Object.keys(rc)) rc[k] = "UNTRUSTED_EXTERNAL";
+    row(p, "email_send").defaultCeiling = "UNTRUSTED_EXTERNAL";
+    const flagged = validatePolicy(p).filter(
+      (f) => f.code === "UNLIFTABLE_STEERING_CEILING" && f.capability === "email_send",
+    );
+    expect(flagged.length, "a row with nothing to refuse was flagged as unliftable").toBe(0);
+  });
+
+  it("contradictions() actually returns the contradictions", () => {
+    // MUTATION M14, and this one is a live gate rather than a reporting nicety: profiles.ts throws
+    // on a non-empty result to stop the conformance package publishing numbers from an invalid
+    // table, and doctor, manifest-report and report all count it. Filtering it to always-empty
+    // turned every one of those into a rubber stamp, and no test noticed.
+    const p = clone() as Record<string, unknown>;
+    p.shell_exec = { ...CAPABILITY_POLICY.text_response, capability: "shell_exec" };
+    const codes = contradictions(validatePolicy(p as CapabilityPolicy)).map((f) => f.code);
+    expect(
+      codes,
+      "contradictions() returned nothing for a policy carrying an unvetted row - every gate that calls it is a rubber stamp",
+    ).toContain("UNKNOWN_CAPABILITY");
+  });
 });

@@ -11,7 +11,13 @@
 // laundered through the agent's own summary, still cannot choose where a request goes. Nothing had to
 // recognise the instruction; by that point there is no wording left to recognise.
 
-import { contextOf, fromExternalApi, fromSystem, fromUser, fromWeb } from "@agent-containment/core";
+import {
+  contextOf,
+  fromExternalApi,
+  fromSystem,
+  fromUser,
+  fromWeb,
+} from "@agent-context-containment/core";
 import { type Demo, runDemo } from "./harness.js";
 
 const ISSUE = `Title: Build fails on Node 22

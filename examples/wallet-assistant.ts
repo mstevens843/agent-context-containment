@@ -11,8 +11,8 @@
 // The same bytes drive three capabilities here and get three different answers. Nothing about the
 // metadata changes between them and none of it is read.
 
-import { detect } from "@agent-containment/classifier";
-import { actionId, decide, sourceId } from "@agent-containment/core";
+import { detect } from "@agent-context-containment/classifier";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
 
 const METADATA = JSON.stringify({
   symbol: "USDC",

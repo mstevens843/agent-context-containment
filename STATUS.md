@@ -50,7 +50,7 @@ Found by adding an import and watching nothing fail.
   tests required to **fail**. 8 of 8 caught. Two properties learned the hard way: it refuses to run
   unless the baseline is green (a differential measurement needs a starting point), and every `find`
   must match exactly once (three entries matched zero times and would have reported as caught).
-- **`docs/claims.json`** — 20 headline claims, each with its grade, the test that would fail if it
+- **`docs/claims.json`** — 21 headline claims, each with its grade, the test that would fail if it
   were false, its negative control, and the command that produces any number in it. Enforced: a
   PROVEN claim with no negative control fails the build, because that is the §15 shape exactly.
 - **Generated blocks** — a `GENERATED:<generator>` marker pair in README and STATUS, filled and verified from the
@@ -89,11 +89,14 @@ their own slot-bound receipt and the action is allowed.
 
 **What else this pass did:**
 
-- **Closed the skipped Postgres proof.** `pnpm prove:postgres` runs **11 scenarios against a live
-  database** using two — and in one case twenty — independent connections: concurrent reserve,
+- **Built the live Postgres proof — which is opt-in, and SKIPPED by default.**
+  `pnpm prove:postgres` runs **11 scenarios against a live database** using two — and in one case twenty — independent connections: concurrent reserve,
   cross-connection replay, restart durability, a crash between reserve and consume, bounded stale
   reclaim, and a **negative control** where a read-then-write adapter double-claims, so the proof can
-  fail. Without `DATABASE_URL` it reports SKIPPED / NOT PROVEN and never green. `pg` is a **root
+  fail. Without `DATABASE_URL` it reports SKIPPED / NOT PROVEN and never green, which is the state
+  of every default run and of CI. A passing run is evidence about **the database, version and
+  topology you pointed it at** — it does not generalise to Postgres as such, and it says nothing
+  about whether *your* hosts share one database, which stays DELEGATED TO CALLER. `pg` is a **root
   devDependency only** — it appears in no published package, so "no driver in the path of a policy
   decision" stays true.
 - **Made the reservation lifecycle observable.** Four states — reserved, consumed, released,
@@ -260,9 +263,9 @@ engine. The benign column is the only thing that tells them apart.
 
 ## v0.4 -> v0.8
 
-| | v0.5 | v0.6 | v0.7 | v0.8 | v0.9 |
+| | v0.6 | v0.7 | v0.8 | v0.9 | v1.0 |
 |---|---|---|---|---|---|
-| tests | 227 | 263 | 304 | 361 | **414** |
+| tests | 263 | 304 | 361 | 414 | **534** |
 | hand-authored + imported corpus | 68 | 68 | 68 | 96 | **98** |
 | corpus splits | 7 | 7 | 7 | 7 | 7 |
 | non-author *content* (exact imports) | 6 | 6 | 6 | 34 | 34 |
@@ -276,7 +279,7 @@ engine. The benign column is the only thing that tells them apart.
 | **real-database proof scenarios** | 0 | 0 | 0 | 0 | **11, live Postgres** |
 | review workflows | 0 | 0 | 0 | 4 | 4 |
 | **reviewer decides for itself** | no | no | no | no | **yes** |
-| defects recorded | 7 | 8 | 8 | 14 | **15, all §9-§14 closed** |
+| defects recorded | 7 | 8 | 8 | 14 | **22** |
 | decisions produced by corpus | 4/4 | 4/4 | 4/4 | 4/4 | 4/4 |
 
 **v0.8 is the first pass since v0.4 to add corpus cases, and it added no engine capability.** The 28
@@ -320,26 +323,32 @@ Counted, not remembered — these were stale for four versions before v0.6.
 | | |
 |---|---|
 | Packages | **5** — `core`, `classifier`, `conformance`, `retrieval`, `ledger` |
-| Source LOC | **11,018** across 5 packages |
-| Test LOC | **7,312** across 34 files |
-| Example LOC | **1,283** across 13 files |
-| Script LOC | **1,875** — 14 report/proof/import scripts, 4 shell |
-| Total TypeScript | **19,613** |
-| Docs + READMEs | **4,836 lines** across 29 files |
+| Packages | **5** — see the generated block below for everything counted |
 | Corpus | **98** hand-written and imported, 6 splits, + **648** generated at run time |
 | Tests | see the generated block below |
 | Mutants | **9** broken engines + 1 reference, + 3 deliberately broken ledger stores |
 | Policy profiles | **5**, all validated at construction |
 
+<!-- GENERATED:repo-stats -->
+| | |
+|---|---|
+| Source LOC | **11,301** across 5 packages |
+| Test LOC | **10,101** across 42 files |
+| Example LOC | **1,406** across 14 files |
+| Script LOC | **3,016** — 19 report/proof/import scripts, 6 shell |
+| Total TypeScript | **22,808** |
+| Docs (docs/) | **4,683 lines** across 23 files |
+<!-- /GENERATED -->
+
 <!-- GENERATED:test-counts -->
 | package | tests |
 |---|---|
-| `conformance` | 183 |
-| `core` | 174 |
-| `ledger` | 77 |
+| `conformance` | 217 |
+| `core` | 215 |
+| `ledger` | 89 |
 | `classifier` | 8 |
 | `retrieval` | 5 |
-| **total** | **447** |
+| **total** | **534** |
 <!-- /GENERATED -->
 
 ## Corpus, by split and by source type
@@ -378,8 +387,8 @@ it was cited for, and §11 was "fixed" when it was mitigated.
 | every capability table is self-consistent | **PROVEN** | 0 contradictions across 5 tables |
 | every mutant is bitten somewhere, none everywhere | **PROVEN** | `pnpm report:mutants` exits 1 otherwise |
 | no document asserts more than the evidence supports | **PROVEN** | 6 rules over every markdown paragraph; an injected false claim is caught |
-| the engine knows no domain vocabulary | **PROVEN** | `policy.ts` scanned |
-| **concurrent reserve, replay, restart, crash, bounded reclaim** | **PROVEN, against a live Postgres** | `pnpm prove:postgres` — **11/11**, two and twenty independent connections, plus a negative control that must double-claim |
+| the engine knows no domain vocabulary | **PROVEN** | every file in `packages/core/src` scanned, with one asserted exemption: `toolrisk.ts`, an advisory naming heuristic `decide()` does not import |
+| **concurrent reserve, replay, restart, crash, bounded reclaim** | **SKIPPED / NOT PROVEN on a default run.** On a run with `DATABASE_URL`: **11/11** | `pnpm prove:postgres` — two and twenty independent connections, plus a negative control that must double-claim. CI sets no `DATABASE_URL` and does not run it, because a skip that exits 0 is a green step proving nothing. A passing run proves it **for that database, that version and that topology only** — not for Postgres in general and not for your deployment |
 | the async reservation protocol | **ADAPTER-PROVEN** | against UNIQUE-constraint semantics in-process |
 | cross-host safety, sync path | **ADAPTER-PROVEN** | `proveCrossHost`, 5 interleavings |
 | the real-database proof, on a run without `DATABASE_URL` | **SKIPPED / NOT PROVEN** | reported as skipped, never as a pass |
@@ -433,6 +442,46 @@ npx tsx examples/playground.ts --matrix --role sink_identity
 npx tsx examples/agents/{email,devops,support,payments,all}.ts
 ```
 
+## Branch risk, in full
+
+Every branch the adversarial mutation sweep found unprotected, and where it stands — the sweep's own
+totals are in the row at the end of the Checks table below. "Closed" here
+means a test exists AND the branch was neutralised and the test watched to fail — a passing test
+alone has never counted in this repository.
+
+| branch | what its removal does | can it ALLOW? | state |
+|---|---|---|---|
+| `P09`–`P15`, `P27` (7) | receipt role/lift/rule/slot checks; unknown capability fails open; a refusal burns receipts | **yes** | closed §19, mutation-checked |
+| `A01`, `A02`, `A04` (3) | Postgres reclaim/consume predicates — live double-spends | **yes** | closed §19, mutation-checked |
+| `P22`, `P23`, `P28`–`P30` (5) | the tuple gate: rule check, key check, slot-vs-label keying | **yes** | closed §20, mutation-checked |
+| `M04`–`M09`, `M14` (6) | five `validatePolicy` suspicion rules, plus `contradictions()` itself | no — advisory, but `M14` is a live CI gate | closed §20, mutation-checked |
+| `X01`, `L08`, `L02`, `A09` (4) | `decideOnly` replay; forged reservation id; unwind on throw; a false `crossHostSafe` claim | **yes** (`X01`, `L08`) | closed §20, mutation-checked |
+| `P32`, `D16`, `D18` (3) | audit-trail taint join; tuple-member empty and bidi guards | no (`P32`), **yes** (`D16`/`D18`) | closed §20, mutation-checked |
+| `A11` | Postgres `stats` stale cutoff — `stranded` permanently 0 | no, observability only | **closed §21**, mutation-checked |
+| `P20` | mixed-provenance over-reporting on spliced payloads | no, diagnostic only | **closed §21**, mutation-checked |
+| `L13` | a receipt-free action makes a spurious ledger round-trip | no, cost only | **closed §21**, mutation-checked |
+| `P05` | one-receipt-one-slot guard | n/a | **UNREACHABLE, kept as defence in depth.** An exhaustive sweep of argument and receipt shapes reaches it zero times. Not ordinary coverage: two tests pin the invariant that kills it, and disabling slot uniqueness makes it fire — the counts are in §20 |
+| `P21` | `mixed && effect === "irreversible"` | n/a | **RECORDED-DEAD / inert.** Documented, not covered. Its stated safety net is `M05`, which is closed |
+
+**Unguarded branches remaining: 0.** Unreachable branches: 2, both dispositioned above.
+
+## Publish state
+
+| | |
+|---|---|
+| packages | five, all under the final scope `@agent-context-containment/*` |
+| version | **`0.1.0`** — settled. The private root manifest stays `0.0.0` and is never published |
+| why not `1.0.0` | "v1.0" here is an **internal hardening milestone**, not an npm version. `1.0.0` promises API stability to strangers on the strength of a mechanism rather than a track record, and the freeze is unavailable while the Postgres proof is opt-in |
+| licence | MIT, declared **and shipped** — a `LICENSE` file in every package, listed in `files`, asserted by a test. All five shipped none until v1.0 finalization |
+| tarball contents | `dist/`, `LICENSE`, `README.md`, `package.json`. No corpus, no tests, no sources |
+| runtime dependencies | only `@agent-context-containment/*`. `pg` is a root devDependency and a test keeps it there |
+| pack/publish tool | **`pnpm`, not `npm`.** `npm pack` copies `workspace:*` into the tarball verbatim and the result cannot be installed |
+| offline smoke | `pnpm smoke:pack` — installs the real tarballs and refuses an injected send in **both CJS and ESM** |
+| published | **nothing, yet.** Dry runs pass; the real publish is a human action |
+| unregistered numeric statements | ratcheted ceiling in `scripts/verify-numbers.mjs`; the count may not grow. Every registered fact is recomputed and checked on each run — `pnpm verify:numbers` prints the list |
+| unguarded branches | none. Two unreachable branches are dispositioned, not covered — see the branch-risk table |
+| root debris | none. `KNOWN_DEBRIS` is empty and three tests keep it empty |
+
 ## Checks
 
 | check | result |
@@ -440,10 +489,12 @@ npx tsx examples/agents/{email,devops,support,payments,all}.ts
 | corpus manifest, 7 files | **PASS** |
 | exact imports, 34 cases | **PASS**, byte-identical |
 | capability manifests, 5 tables | **PASS**, 0 contradictions; 7 suspicions on the shipped table, kept visible |
-| lint (119 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
-| test | **PASS — 414** (361 before this pass) |
+| lint (141 files) · typecheck (9 tasks) · build (5 pkgs) | **PASS** |
+| test | **PASS — 534** (529 before this pass) |
+| claim gates in CI: `blocks:check`, `verify:numbers`, `audit:docs`, `audit:claims`, `audit:mutations` | **PASS**, and they now RUN — none of them was in CI before v1.0, which is why the tree shipped with `audit:docs` exiting 1. See DEFECTS_FOUND.md §19 |
+| adversarial mutation sweep, 105 guards | **73 protected · 30 unguarded · 2 unreachable** when first swept. **All 30 are now closed**, each written against its mutation and each watched to fail under it — 9 in §19, 18 in §20, 3 in §21. The 2 unreachable are dispositioned, not covered: see the branch-risk table below |
 | per-package `tsconfig.test.json` | **PASS** ×5 |
-| examples ×12, playground matrix | **PASS** |
+| examples ×14, playground matrix | **PASS** |
 | async ledger conformance, 11 scenarios × 2 adapters | **PASS** |
 | a read-then-write async adapter is REJECTED | **PASS**, on exactly one scenario |
 | a store that always says "recorded" is REJECTED | **PASS** |
@@ -491,8 +542,8 @@ outside the formatter's scope. See `docs/DEFECTS_FOUND.md` §5.
 | **Content frozen at v0** | 16 cases. No case added, removed or altered since it was written. New regression cases go to `corpus/tuning/`. |
 | **Bytes protected by `MANIFEST.sha256`** | SHA-256 per file, 7/7 verifying. |
 | **Drift guarded in CI** | `corpus-integrity` job runs `shasum -a 256 -c corpus/holdout/MANIFEST.sha256` before anything else and gates `build-test` via `needs:`. |
-| **Formatter and linter excluded** | `corpus` is in `biome.json`'s ignore list; `pnpm lint` checks 43 files and touches none of the corpus. |
-| **Git-object freeze** | **STILL PENDING.** `FREEZE.json` has `frozenAtCommit: null`. |
+| **Formatter and linter excluded** | `corpus` is in `biome.json`'s ignore list; `pnpm lint` touches none of the corpus. |
+| **Git-object freeze** | **UNAVAILABLE, not pending.** Attempted and correctly rejected: the recorded commit already contained the engine, and no holdout-only pre-engine commit exists in this history. `FREEZE.json` has `frozenAtCommit: null` and `state: attempted_and_failed`. `pnpm verify:freeze` exits 1, permanently and by design. |
 
 The manifest is the *current* drift guard, and it is a weaker anchor than a commit: it proves the
 files match a recorded digest, not that the digest was recorded before the engine existed. Anyone who

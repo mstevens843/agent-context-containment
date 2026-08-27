@@ -3,7 +3,7 @@
 // The ranking is not the contribution here - carrying provenance through retrieval is - so the
 // tests that matter are the provenance one and the honest recall measurement.
 
-import { sourceId } from "@agent-containment/core";
+import { sourceId } from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import { buildIndex, recallAt, tokenize } from "../src/index.js";
 

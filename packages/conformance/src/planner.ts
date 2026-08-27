@@ -37,8 +37,8 @@ import {
   admitUserConfirmedValue,
   ceilingFor,
   sourceId,
-} from "@agent-containment/core";
-import type { CapabilityPolicy } from "@agent-containment/core";
+} from "@agent-context-containment/core";
+import type { CapabilityPolicy } from "@agent-context-containment/core";
 import { type RunResult, type Scenario, runScenario } from "./agentrun.js";
 
 export type PlanShape =

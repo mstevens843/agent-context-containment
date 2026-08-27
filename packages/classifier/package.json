@@ -1,6 +1,6 @@
 {
-  "name": "@agent-containment/classifier",
-  "version": "0.0.1",
+  "name": "@agent-context-containment/classifier",
+  "version": "0.1.0",
   "description": "The heuristic prompt-injection detector this project is measured against, ported from a production agent wallet. Deliberately a peer of the policy engine, not a subordinate.",
   "license": "MIT",
   "author": "Mathew Stevens",
@@ -28,7 +28,7 @@
       "require": "./dist/index.cjs"
     }
   },
-  "files": ["dist"],
+  "files": ["dist", "LICENSE"],
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
@@ -37,6 +37,6 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@agent-containment/core": "workspace:*"
+    "@agent-context-containment/core": "workspace:*"
   }
 }

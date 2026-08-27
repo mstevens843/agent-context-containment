@@ -49,7 +49,7 @@ rather than a keyword grab, and it is the only version of a model layer that bel
 library.
 
 **Data.** The corpus here is 51 cases and nowhere near enough. The honest source is real retrieval
-traffic with per-chunk origin labels, which `@agent-containment/retrieval` already carries through
+traffic with per-chunk origin labels, which `@agent-context-containment/retrieval` already carries through
 indexing.
 
 **How it would be evaluated.** The same 2x2, the same held-out discipline, the same refusal to print a

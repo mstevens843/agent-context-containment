@@ -1,9 +1,9 @@
-# @agent-containment/conformance
+# @agent-context-containment/conformance
 
 The evaluation harness. Point it at **your** policy, not just this one.
 
 ```ts
-import { runCorpus, loadSplit } from "@agent-containment/conformance"
+import { runCorpus, loadSplit } from "@agent-context-containment/conformance"
 
 const report = runCorpus({
   cases: loadSplit("./corpus/holdout", "holdout"),

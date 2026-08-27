@@ -13,7 +13,7 @@
 //
 // Pure and dependency-free, so it runs under any test runner - or none.
 
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import type { LedgerGuarantees, ReceiptLedger, SpentRecord } from "./index.js";
 
 export interface ConformanceCheck {

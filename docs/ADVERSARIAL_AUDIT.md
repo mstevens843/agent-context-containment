@@ -112,3 +112,52 @@ defect rather than an afterthought.
 
 The independent reader remains the only control that does not share the author's blind spots, and
 that is a person, not a command.
+
+## The serialized refutation protocol
+
+Added at v1.0-rc because the refutation run that produced §19 got two things wrong before it produced
+anything useful, and both failures were invisible from inside the run.
+
+**Failure 1: the refuters audited the wrong repository.** Agents were launched with worktree
+isolation, which forked the *session's* repository rather than the target. Four refuters spent a full
+run reading a different codebase. One of them noticed and refused to invent findings; nothing in the
+harness would have caught it if it had not.
+
+**Failure 2: two refuters shared one working tree.** Both mutated source and ran `pnpm build && pnpm
+test` concurrently. Each was reading the other's mutations as its own result. Any finding from that
+run would have been noise wearing the costume of evidence.
+
+Neither shows up as an error. Both produce confident, well-formatted, entirely wrong reports — which
+is the same failure mode as every defect in `DEFECTS_FOUND.md`, one level up: **a mechanism reporting
+success without having measured anything.**
+
+### The protocol
+
+1. **Name the tree, absolutely.** The refuter states the absolute path it is auditing and confirms it
+   can see `package.json`, `packages/core` and `docs/DEFECTS_FOUND.md` before doing anything else. If
+   it cannot, it stops and says so. It never substitutes a plausible nearby repository.
+2. **One mutator at a time.** Refuters that mutate files run **serially**, never concurrently, in the
+   same tree. Read-only analysis may run in parallel with anything.
+3. **Rebuild after every mutation.** Several packages' tests import the *built* package, not `src` —
+   `packages/ledger` among them. A mutation to `src` without `pnpm build` changes nothing, and the
+   suite passes for a reason that has nothing to do with the branch under test. This mistake was made
+   twice during the §20 pass and caught both times only by the negative control.
+4. **Record four fields per mutation**, or the run is not evidence:
+   `mutation applied` · `command expected to fail` · `command's actual result` · `restored + verified`.
+5. **Revert before the next mutation**, and confirm the suite is green again before continuing. A
+   mutation left in place makes every subsequent result meaningless in a way that looks like a finding.
+6. **A test that passes under its own mutation is a failed test, not a passing one.** Three separate
+   times in the §19/§20 passes, new tests written to close a branch passed with that branch removed:
+   they asserted on the decision word while the action was refused for an unrelated reason. Assert on
+   the observable the branch actually moves.
+
+### The checklist item this adds
+
+> **Refutation was serialized.** No two mutating refuters shared a working tree, every mutation was
+> rebuilt and reverted, and every new branch test was watched to fail under its own mutation.
+>
+> **If refutation was run concurrently in one tree, the result is not evidence and the release is not
+> green** — regardless of what the run reported. Re-run it serially.
+
+`pnpm audit:release` cannot check this. It is a property of how the refutation was *conducted*, not
+of the tree it left behind, which is exactly why it is written down here instead.

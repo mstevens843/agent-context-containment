@@ -43,3 +43,60 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test
+
+  # THE CLAIM GATES. Everything in this job was built between v0.8 and v1.0 to stop the project
+  # overstating itself, and until v1.0 none of it ran in CI - so the repository shipped with
+  # `audit:docs` exiting 1 and a README number seven tests out of date, and every green checkmark
+  # said nothing about it. That is defect §17 ("the control for the mutant apparatus was outside
+  # CI") at the scale of the whole apparatus. See DEFECTS_FOUND.md §19.
+  #
+  # Separate job, not extra steps in build-test, for the same reason corpus-integrity is separate:
+  # when this fails the red X should say "a claim went stale", not "the build broke".
+  #
+  # `packages/conformance/test/claimregistry.test.ts` asserts that every gate named here is really
+  # here, so deleting a step fails the suite rather than quietly reducing coverage.
+  claim-gates:
+    name: Claim gates (docs, numbers, blocks, registry, mutations)
+    runs-on: ubuntu-latest
+    needs: corpus-integrity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      # Generated blocks must match what the generators produce right now.
+      - run: pnpm blocks:check
+      # Every registered hand-typed number must agree with the command that produces it. This one
+      # shells out to `pnpm test`, which is why it cannot live inside vitest and must run here.
+      - run: pnpm verify:numbers
+      # The prose guard: no document may overstate what the repository proves.
+      - run: pnpm audit:docs
+      # The claim registry's own rules, plus the corpus/classifier claim tests.
+      - run: pnpm audit:claims
+      # Delete each recorded fix and require a named test to fail. A mutation nothing bites is a
+      # branch nobody is protecting.
+      - run: pnpm audit:mutations
+      # The whole deterministic release audit, which is a superset of the steps above and also
+      # re-runs the corpus, the proofs and the freeze-state check. Kept as its own step so a failure
+      # names `audit:release` rather than whichever gate it happened to reach first.
+      - run: pnpm audit:release
+      # POSTGRES IS DELIBERATELY NOT RUN HERE. `prove:postgres` needs a live database; CI sets no
+      # DATABASE_URL, so it would report SKIPPED / NOT PROVEN and exit 0 - a green step that proved
+      # nothing, which is the exact shape this job exists to stop. The concurrency claim is graded
+      # SKIPPED in docs/claims.json for the same reason, and RELEASE_CHECKLIST.md carries the opt-in
+      # command for anyone who wants the real proof.
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::A release claim is no longer supported by the evidence it names."
+          echo "This job exists because every mechanism in it was once green while a claim was false."
+          echo "Do NOT weaken the check to make it pass - fix the claim, or regrade it in docs/claims.json."
+          echo "See docs/DEFECTS_FOUND.md sections 15 to 19."
+
+  # The git-object freeze is EXPECTED TO FAIL and is therefore not a gate. It is recorded as
+  # attempted_and_failed and exits 1 by design; running it here would make CI permanently red for a
+  # limitation the project reports honestly rather than a defect. See STATUS.md.

@@ -13,7 +13,7 @@
 // │                                                                                              │
 // │  So use the guard instead:                                                                   │
 // │                                                                                              │
-// │      import { createGuard } from "@agent-containment/ledger";                                │
+// │      import { createGuard } from "@agent-context-containment/ledger";                                │
 // │      const guard = createGuard({ clock: () => Date.now() });                                 │
 // │      guard.decide({ action, sources, receipts });                                            │
 // │                                                                                              │
@@ -158,7 +158,7 @@ import { type CapabilityPolicy, decide as decideRaw } from "./policy.js";
  *
  * That is the whole mechanism, and it is worth being honest about its size: this is a NAMING
  * convention, not a barrier. Nothing stops anyone importing the flat export. What stops the
- * *accident* is the guard's type, in `@agent-containment/ledger` - this only stops the accident
+ * *accident* is the guard's type, in `@agent-context-containment/ledger` - this only stops the accident
  * being invisible.
  *
  * YOU ARE RESPONSIBLE FOR `now` AND `spentReceipts` when you call this. Omitting them is legal,

@@ -14,7 +14,7 @@ import {
   admitUserConfirmedValue,
   decide,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import { describe, expect, it } from "vitest";
 import { createGuard, jsonFileLedger, memoryLedger } from "../src/index.js";
 
@@ -188,5 +188,42 @@ describe("ledgers", () => {
     expect(
       createGuard({ clock: () => AT, ledger: jsonFileLedger(io) }).decide(input(r)).decision,
     ).not.toBe("ALLOW");
+  });
+});
+
+describe("decideOnly carries its own replay protection", () => {
+  // MUTATION X01: `spentSet()` -> `new Set()` in createGuard. `guard.decide(...)` still refuses,
+  // because the §10 re-decide path catches it via `commit`'s `already_spent` - so the whole suite
+  // passed with the primary replay check removed. That is §14's shape: a defect hidden by a
+  // mechanism unrelated to it, here rescuing the engine rather than a mutant.
+  //
+  // It matters because `decideOnly` is the read-only half of the API. A caller doing
+  // "check, then act elsewhere, then commit" - which is exactly what the async ledger's two-phase
+  // protocol does - reads its answer from here. See DEFECTS_FOUND.md §20.
+
+  it("refuses a receipt the ledger has already recorded, without needing a commit to notice", () => {
+    const guard = createGuard({ clock: () => AT });
+    const r = receipt();
+    expect(guard.decide(input(r)).decision, "the fixture never spent the receipt").toBe("ALLOW");
+
+    const v = guard.decideOnly(input(r));
+    expect(
+      v.decision,
+      "decideOnly permitted an already-spent receipt - the read-only half of the API has no replay protection",
+    ).not.toBe("ALLOW");
+    expect(
+      v.reasons.map((x) => x.code),
+      "decideOnly refused, but not for replay - the refusal is coming from something else",
+    ).toContain("receipt_already_consumed");
+  });
+
+  it("and the refusal comes from the engine, not from the wrapper", () => {
+    // The §10 design rule: the reason code, the decision word and the effects all come from
+    // `policy.ts`, or an auditor cannot tell an engine refusal from a wrapper's opinion.
+    const guard = createGuard({ clock: () => AT });
+    const r = receipt();
+    guard.decide(input(r));
+    const v = guard.decideOnly(input(r));
+    expect(v.spends.length, "a refused verdict reported spent receipts").toBe(0);
   });
 });

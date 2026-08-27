@@ -10,9 +10,9 @@
 // not a proof, so `nonAtomicStore` exists solely to be rejected: it does the check and the write in
 // two steps, exactly as `jsonFileLedger` does, and claims cross-host safety anyway.
 
-import type { ReceiptId } from "@agent-containment/core";
-import { actionId, admitUserConfirmedValue, sourceId } from "@agent-containment/core";
-import type { ReceiptEvidence } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
+import { actionId, admitUserConfirmedValue, sourceId } from "@agent-context-containment/core";
+import type { ReceiptEvidence } from "@agent-context-containment/core";
 import {
   POSTGRES_SCHEMA,
   type ReceiptLedger,
@@ -30,7 +30,7 @@ import {
   nonAtomicStore,
   postgresSpendStore,
   proveCrossHost,
-} from "@agent-containment/ledger";
+} from "@agent-context-containment/ledger";
 import { describe, expect, it } from "vitest";
 
 const id = (s: string): ReceiptId => s as unknown as ReceiptId;

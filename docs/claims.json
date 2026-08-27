@@ -1,5 +1,5 @@
 {
-  "about": "Every headline claim this project makes, and what would fail if it were false. Not every sentence - the load-bearing ones, the ones a reader would quote. Defect \u00a715 is why this file exists: two claims were graded PROVEN on evidence that did not support them, and nothing in the repository connected a claim to the test that was supposed to defend it.",
+  "about": "Every headline claim this project makes, and what would fail if it were false. Not every sentence - the load-bearing ones, the ones a reader would quote. Defect §15 is why this file exists: two claims were graded PROVEN on evidence that did not support them, and nothing in the repository connected a claim to the test that was supposed to defend it.",
   "grades": {
     "PROVEN": "a test in this repository fails if this stops being true, AND a negative control shows the test can fail",
     "ADAPTER-PROVEN": "the code is right; says nothing about any deployment or any database",
@@ -10,8 +10,8 @@
   },
   "rules": {
     "everyClaimNeedsATest": "A claim with no `test` is a claim nobody is defending. PROVEN and ADAPTER-PROVEN require one.",
-    "provenNeedsANegativeControl": "A PROVEN claim needs something deliberately broken that the test rejects - a mutant, a fake, or a mutation entry. Otherwise it is \u00a715: a test that passes and could not fail.",
-    "numbersMustBeGenerated": "A numeric claim must name the script that produces it. `pnpm audit:claims` re-runs that script and compares. Four separate passes of this project shipped a stale hand-typed number.",
+    "provenNeedsANegativeControl": "A PROVEN claim needs something deliberately broken that the test rejects - a mutant, a fake, or a mutation entry. Otherwise it is §15: a test that passes and could not fail.",
+    "numbersMustBeGenerated": "A numeric claim must name the command that produces it. `pnpm audit:claims` enforces that the command EXISTS and is a real package script; `pnpm verify:numbers` re-runs a registered subset of facts and fails when a document states a different value. Until v1.0 this rule claimed that audit:claims re-ran and compared - it did not, and five deliberately-broken numbers passed it. See DEFECTS_FOUND.md §18. Facts outside verify:numbers' list are still unchecked prose.",
     "notClaimedNeedsNoTest": "NOT-CLAIMED and DELEGATED claims are about what is NOT asserted. The prose guard defends those, not a unit test."
   },
   "claims": [
@@ -22,7 +22,7 @@
       "test": "packages/core/test/contract.test.ts",
       "negativeControl": "mutation entry `core-purity`: adding a node:fs import to policy.ts must fail the contract test",
       "mutation": "core-purity",
-      "note": "The import half of this check was VACUOUS from the day it was written until v1.0 - the stripper blanked string literals before the scan, so it matched nothing. See DEFECTS_FOUND.md \u00a716."
+      "note": "The import half of this check was VACUOUS from the day it was written until v1.0 - the stripper blanked string literals before the scan, so it matched nothing. See DEFECTS_FOUND.md §16."
     },
     {
       "id": "holdout-bytes-frozen",
@@ -30,7 +30,7 @@
       "grade": "PROVEN",
       "test": "scripts/verify-corpus.sh",
       "generatedBy": "pnpm verify:corpus",
-      "negativeControl": "a formatter rewrote three files once and the manifest caught it - defect \u00a75"
+      "negativeControl": "a formatter rewrote three files once and `pnpm verify:corpus` caught it against corpus/holdout/MANIFEST.sha256 - defect §5"
     },
     {
       "id": "imports-are-upstream-bytes",
@@ -38,7 +38,7 @@
       "grade": "PROVEN",
       "test": "packages/conformance/test/import.test.ts",
       "generatedBy": "pnpm import:check",
-      "negativeControl": "editing one imported string makes the rebuild diverge and the check exits 1"
+      "negativeControl": "editing one imported string makes the rebuild diverge and `pnpm import:check` exits 1; the rebuild runs from scripts/import-injecagent.mjs"
     },
     {
       "id": "receipt-binds-to-slot",
@@ -55,7 +55,7 @@
       "test": "packages/ledger/test/durable.test.ts",
       "negativeControl": "a store that reports unspent on read and already-taken on write",
       "mutation": "guard-redecide",
-      "note": "Graded PROVEN in v0.9 on a test that could not fail. Deleting the branch left 74/74 passing. See DEFECTS_FOUND.md \u00a715."
+      "note": "Graded PROVEN in v0.9 on a test that could not fail. Deleting the branch left 74/74 passing. See DEFECTS_FOUND.md §15."
     },
     {
       "id": "manifests-self-consistent",
@@ -63,7 +63,7 @@
       "grade": "PROVEN",
       "test": "packages/core/test/manifest.test.ts",
       "generatedBy": "pnpm verify:manifests",
-      "negativeControl": "the tests construct contradictory manifests and assert each code fires"
+      "negativeControl": "packages/core/test/manifest.test.ts constructs contradictory manifests and asserts each code fires; neutralising any validatePolicy rule fails a named test"
     },
     {
       "id": "mutants-discriminate",
@@ -71,46 +71,47 @@
       "grade": "PROVEN",
       "test": "packages/conformance/test/splits.test.ts",
       "generatedBy": "pnpm report:mutants",
-      "negativeControl": "the bite matrix exits 1 if any mutant is bitten by nothing or by everything"
+      "negativeControl": "`pnpm report:mutants` exits 1 if any mutant is bitten by nothing or by everything - the bite matrix is built in scripts/bite-matrix.mjs"
     },
     {
       "id": "silent-attacks",
       "claim": "69 of 69 silent attacks are contained; the classifier catches 0.",
-      "grade": "PROVEN",
+      "grade": "ADAPTER-PROVEN",
       "test": "packages/conformance/test/splits.test.ts",
       "generatedBy": "pnpm report",
-      "negativeControl": "the labelling convention test asserts no silent-labelled attack is flagged by classify()"
+      "negativeControl": "NONE THAT IS A DELIBERATELY BROKEN ARTIFACT. The cited labelling-convention assertion is a second assertion over the same data, not a control - flagged by adversarial review at v1.0. What holds the number honest is that `pnpm report` recomputes it from the corpus on every run and verify:numbers fails if a document disagrees.",
+      "note": "Downgraded from PROVEN at v1.0. The measurement is real and regenerated, but PROVEN in this registry requires a negative control showing the test CAN fail, and this claim never had one. See DEFECTS_FOUND.md §19."
     },
     {
       "id": "engine-knows-no-domain",
-      "claim": "The policy engine special-cases no business domain: no refund, ticket, deploy, kubernetes, invoice, solana or USDC anywhere in its code.",
+      "claim": "The policy engine special-cases no business domain: no refund, ticket, deploy, kubernetes, invoice, solana or USDC anywhere in packages/core/src, with one asserted exemption - toolrisk.ts, an advisory naming heuristic that decide() does not import, may contain the verbs deploy and refund.",
       "grade": "PROVEN",
       "test": "packages/conformance/test/demos.test.ts",
-      "negativeControl": "the test scans policy.ts source; adding the word fails it",
-      "note": "Stated precisely because the first version of this entry said \"no wallet\" - which is FALSE: `wallet` appears four times in policy.ts, because `wallet_sign` is a capability name, and it was never in the scanned word list. The claim is about the engine not branching on a DOMAIN, not about the absence of a substring. `wallet_sign` names a capability class - irreversible, full egress, nothing lifts it - and its BEHAVIOUR is domain-independent; only its name is not. Caught by an adversarial audit of this registry. See DEFECTS_FOUND.md \u00a717."
+      "negativeControl": "appending `export const LEAK = \"kubernetes\"` to packages/core/src/check.ts fails \"the engine contains no domain vocabulary\"; demonstrated, and it PASSED before v1.0 widened the scan from policy.ts to the whole package",
+      "note": "Stated precisely because the first version of this entry said \"no wallet\" - which is FALSE: `wallet` appears four times in policy.ts, because `wallet_sign` is a capability name, and it was never in the scanned word list. The claim is about the engine not branching on a DOMAIN, not about the absence of a substring. `wallet_sign` names a capability class - irreversible, full egress, nothing lifts it - and its BEHAVIOUR is domain-independent; only its name is not. Caught by an adversarial audit of this registry. See DEFECTS_FOUND.md §17. v1.0: an adversarial reviewer showed the entry said \"anywhere in its code\" while the test read ONE file - `export const X = \"deploy\"` in check.ts passed 461/461, and `deploy` and `refund` were ALREADY live in the shipped toolrisk.ts. The scan now walks every file in the core package and the toolrisk exemption is pinned by a second test that fails if decide() ever imports it. See DEFECTS_FOUND.md §19."
     },
     {
       "id": "no-document-overstates",
       "claim": "No document asserts a freeze proof, calls Postgres proven without its condition, implies a validated manifest is honest, claims the workflows prove judgement, or asserts optimality.",
       "grade": "PROVEN",
       "test": "packages/conformance/test/claims.test.ts",
-      "negativeControl": "an injected false claim is demonstrably caught - see audit:docs"
+      "negativeControl": "an injected false claim is demonstrably caught by `pnpm audit:docs`; the five prose rules live in packages/conformance/test/claims.test.ts"
     },
     {
       "id": "postgres-concurrency",
       "claim": "Concurrent reserve, cross-process replay refusal, restart durability, crash handling and bounded stale reclaim hold against a real Postgres.",
-      "grade": "PROVEN",
+      "grade": "SKIPPED",
       "test": "scripts/prove-postgres.mjs",
       "generatedBy": "DATABASE_URL=... pnpm prove:postgres",
       "negativeControl": "a read-then-write adapter in the same script must double-claim",
-      "note": "PROVEN only on a run with DATABASE_URL. Without it the whole block reports SKIPPED / NOT PROVEN."
+      "note": "SKIPPED is the honest grade for a DEFAULT run: nothing runs this without DATABASE_URL and CI never sets one, which is precisely what this registry defines SKIPPED to mean. On a run WITH DATABASE_URL the script proves all five scenarios and the read-then-write control double-claims; that run is real and reportable, but it is not what `pnpm test` or CI does. Graded PROVEN until v1.0, when an adversarial reviewer pointed out the entry contradicted the registry's own vocabulary. See DEFECTS_FOUND.md §19."
     },
     {
       "id": "async-protocol",
       "claim": "The reserve/decide/consume-or-release protocol never spends a receipt behind a refusal.",
       "grade": "ADAPTER-PROVEN",
       "test": "packages/ledger/test/async.test.ts",
-      "negativeControl": "a read-then-write async adapter fails exactly one conformance scenario"
+      "negativeControl": "a read-then-write async adapter fails exactly one conformance scenario under `pnpm prove:asyncledger`"
     },
     {
       "id": "crosshost-sync",
@@ -118,7 +119,7 @@
       "grade": "ADAPTER-PROVEN",
       "test": "packages/ledger/test/durable.test.ts",
       "generatedBy": "pnpm prove:crosshost",
-      "negativeControl": "nonAtomicStore fails exactly the concurrent double-spend scenario"
+      "negativeControl": "nonAtomicStore fails exactly the concurrent double-spend scenario under `pnpm prove:crosshost`"
     },
     {
       "id": "postgres-without-url",
@@ -161,6 +162,15 @@
       "claim": "The taint wrapper is cooperative, not enforced. There is no membrane in JavaScript.",
       "grade": "KNOWN-RISK",
       "test": "packages/core/test/taint.test.ts"
+    },
+    {
+      "id": "hand-typed-numbers-agree",
+      "claim": "Every registered hand-typed number in the documents agrees with the command that produces it.",
+      "grade": "PROVEN",
+      "test": "scripts/verify-numbers.mjs",
+      "generatedBy": "pnpm verify:numbers",
+      "negativeControl": "editing any registered number to a wrong value makes `pnpm verify:numbers` exit 1 - demonstrated on five facts, and it caught README.md's stale test count at v1.0",
+      "note": "Covers a REGISTERED SUBSET, not every number. A fact nobody listed is still unchecked prose, and the list is short and load-bearing rather than complete. v1.0 CORRECTION: this entry named packages/conformance/test/claimregistry.test.ts, which never invokes verify:numbers - so `pnpm test` passed 461/461 while the claim was FALSE (README said 454). verify:numbers shells out to `pnpm test` and therefore cannot run inside vitest; it is a CI gate, and a claimregistry test now asserts CI actually runs it. See DEFECTS_FOUND.md §19."
     }
   ]
 }

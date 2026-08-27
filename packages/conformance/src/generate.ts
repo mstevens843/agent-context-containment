@@ -14,8 +14,8 @@
 // generated corpus byte for byte, so a generated suite can be diffed across commits and a new
 // failure means something changed in the engine rather than in the dice.
 
-import type { CorpusCase, Provenance, Source, SourceId } from "@agent-containment/core";
-import { advanced, sourceId } from "@agent-containment/core";
+import type { CorpusCase, Provenance, Source, SourceId } from "@agent-context-containment/core";
+import { advanced, sourceId } from "@agent-context-containment/core";
 
 /** Local aliases, so the appended coverage code reads as a deliberate probe of the raw engine. */
 const advancedDecide = advanced.decide;
@@ -200,7 +200,7 @@ import {
   ceilingFor,
   taintAtMost,
   taintOf,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 /**
  * Roles that direct an action. The distinction the attack surface turns on.

@@ -11,7 +11,7 @@ import {
   type Split,
   checkCorpus,
   formatCorpusViolations,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 /**
  * Files that live in a split directory but are not cases.

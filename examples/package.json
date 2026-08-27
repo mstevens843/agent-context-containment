@@ -1,5 +1,5 @@
 {
-  "name": "@agent-containment/examples",
+  "name": "@agent-context-containment/examples",
   "version": "0.0.0",
   "private": true,
   "description": "Runnable examples. Private and never published; each one prints a decision and its reasons.",
@@ -22,9 +22,9 @@
     "agents:code": "tsx agents/code.ts"
   },
   "dependencies": {
-    "@agent-containment/classifier": "workspace:*",
-    "@agent-containment/core": "workspace:*",
-    "@agent-containment/ledger": "workspace:*",
-    "@agent-containment/retrieval": "workspace:*"
+    "@agent-context-containment/classifier": "workspace:*",
+    "@agent-context-containment/core": "workspace:*",
+    "@agent-context-containment/ledger": "workspace:*",
+    "@agent-context-containment/retrieval": "workspace:*"
   }
 }

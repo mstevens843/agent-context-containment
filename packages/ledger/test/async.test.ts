@@ -10,13 +10,13 @@
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { ReceiptId } from "@agent-containment/core";
+import type { ReceiptId } from "@agent-context-containment/core";
 import {
   actionId,
   admitConfirmedTuple,
   admitUserConfirmedValue,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import {
   type AsyncReceiptLedger,
   type AsyncSqlExecutor,
@@ -26,7 +26,7 @@ import {
   formatAsyncChecks,
   memoryAsyncLedger,
   postgresAsyncLedger,
-} from "@agent-containment/ledger";
+} from "@agent-context-containment/ledger";
 import { describe, expect, it } from "vitest";
 
 const SCOPE = {
@@ -83,6 +83,22 @@ const fakePg = (rows: Map<string, Record<string, unknown>>): AsyncSqlExecutor =>
       return [{ receipt: k }];
     }
     if (s.startsWith("UPDATE") && s.includes("SET reservation_id")) {
+      // THE DOUBLE MUST NOT ENFORCE WHAT THE ADAPTER IS SUPPOSED TO ENFORCE.
+      //
+      // This branch used to re-implement the reclaim predicate in JavaScript below and assert
+      // NOTHING about the SQL - unlike its two siblings, which check the text. So the adapter could
+      // drop `state = 'reserved'` and `at < $5` from the WHERE clause and every test still passed:
+      // the fake refused on its behalf. A v1.0 mutation sweep showed both deletions are live
+      // double-spends against a SQL-faithful double - a consumed receipt becomes re-reservable, and
+      // a reservation one millisecond old is stolen from its holder.
+      //
+      // That is §15 one layer down, inside the file that carries the whole cross-host guarantee. The
+      // JS predicate below stays, because the fake still has to BEHAVE like Postgres; these two
+      // lines are what make it a test of the adapter rather than of itself.
+      expect(s, "reclaim must never take a consumed row - that is the double-spend").toContain(
+        "state = 'reserved'",
+      );
+      expect(s, "reclaim must only take a row already past the stale cutoff").toContain("at < $5");
       const [k, resId, now, actionIdParam, cutoff] = params;
       const row = rows.get(String(k));
       if (row === undefined || row.state !== "reserved" || Number(row.at) >= Number(cutoff))
@@ -94,6 +110,11 @@ const fakePg = (rows: Map<string, Record<string, unknown>>): AsyncSqlExecutor =>
     }
     if (s.startsWith("UPDATE") && s.includes("SET state = 'consumed'")) {
       expect(s, "consume must be guarded by reservation_id").toContain("reservation_id = $1");
+      // Without this, a second consume restamps an already-consumed row's audit timestamp: the
+      // record of WHEN a receipt was spent silently moves. Mutation A04.
+      expect(s, "consume must not rewrite a row that is already consumed").toContain(
+        "state = 'reserved'",
+      );
       for (const row of rows.values()) {
         if (row.reservation_id === String(params[0]) && row.state === "reserved") {
           row.state = "consumed";
@@ -109,6 +130,26 @@ const fakePg = (rows: Map<string, Record<string, unknown>>): AsyncSqlExecutor =>
         if (row.reservation_id === String(params[0]) && row.state === "reserved") rows.delete(k);
       }
       return [];
+    }
+    if (s.startsWith("SELECT state")) {
+      // The stats query carries the stale cutoff as a WHERE predicate, and until v1.0-rc this fake
+      // did not recognise the statement at all - so `stats()` on the Postgres adapter had no test,
+      // and the cutoff could be neutralised without anything noticing (mutation A11). Asserting the
+      // predicate here is the same rule the reclaim and consume branches follow: the DOUBLE must not
+      // enforce what the ADAPTER is supposed to enforce.
+      expect(s, "stats must count stale rows with a cutoff, not count all reserved rows").toContain(
+        "state = 'reserved' AND at < $1",
+      );
+      const cutoff = Number(params[0]);
+      const byState = new Map<string, { n: number; stale: number }>();
+      for (const row of rows.values()) {
+        const st = String(row.state);
+        const acc = byState.get(st) ?? { n: 0, stale: 0 };
+        acc.n += 1;
+        if (st === "reserved" && Number(row.at) < cutoff) acc.stale += 1;
+        byState.set(st, acc);
+      }
+      return [...byState.entries()].map(([state, v]) => ({ state, n: v.n, stale: v.stale }));
     }
     if (s.startsWith("SELECT 1")) return rows.has(String(params[0])) ? [{ ok: 1 }] : [];
     if (s.startsWith("SELECT receipt")) {
@@ -595,5 +636,281 @@ describe("crash semantics and the stranded-receipt count", () => {
       /no free value|There is no free/i,
     );
     expect(src, "the dangerous direction is not named").toMatch(/double-spend|about to consume/i);
+  });
+});
+
+describe("a reservation may only finish work it actually owns", () => {
+  const id2 = (x: string) => x as unknown as ReceiptId;
+  // MUTATION L08: `row?.reservationId === reservation.id` -> `row !== undefined` in the in-memory
+  // adapter's `consume`. The Postgres equivalent IS tested - `fakePg` asserts the consume statement
+  // carries `reservation_id = $1` - but the in-memory adapter, which is the default and the one
+  // every example runs, had nothing. `async.ts` calls the thing this prevents "a second winner".
+  //
+  // The shape is a forged or stale reservation handle: a caller that kept a Reservation object from
+  // an earlier attempt, or a second host that guessed. See DEFECTS_FOUND.md §20.
+
+  it("a reservation with somebody else's id cannot consume their row", async () => {
+    const shared = new Map();
+    const l = memoryAsyncLedger(shared, { staleAfterMs: null });
+    const mine = await l.reserve([id2("r-1")], "action-a", 0);
+    expect(mine.reserved.length, "the fixture never reserved").toBe(1);
+
+    // A handle that names the same receipt but a reservation nobody issued.
+    const forged = { ...mine, id: "res-not-mine" };
+    await l.consume(forged, 100);
+
+    const after = await l.stats(200);
+    expect(
+      after.consumed,
+      "a forged reservation id finalised a row it did not own - a second winner",
+    ).toBe(0);
+    expect(after.reserved, "the real holder lost its reservation to a forged handle").toBe(1);
+
+    // And the real holder can still finish.
+    await l.consume(mine, 300);
+    expect((await l.stats(400)).consumed, "the rightful holder could no longer consume").toBe(1);
+  });
+
+  it("a forged reservation cannot release somebody else's row either", async () => {
+    const shared = new Map();
+    const l = memoryAsyncLedger(shared, { staleAfterMs: null });
+    const mine = await l.reserve([id2("r-2")], "action-b", 0);
+    await l.release({ ...mine, id: "res-not-mine" });
+
+    const after = await l.stats(100);
+    expect(
+      after.reserved,
+      "a forged reservation released a row it did not own, re-arming the receipt for anyone",
+    ).toBe(1);
+  });
+});
+
+describe("an adapter may not claim a guarantee it does not have", () => {
+  // MUTATION A09: `crossHostSafe: args.sharedAcrossHosts` -> `true`, asyncpg.ts.
+  //
+  // The GUARD side of this is tested - `createAsyncGuard({requireGuarantees})` throws when the
+  // ledger does not claim what the deployment needs. The ADAPTER side, the thing that decides what
+  // is claimed, was not. So the adapter could assert cross-host safety on a ledger explicitly
+  // constructed without it, the guard would be satisfied, and the check would pass by agreeing with
+  // a lie. `asyncpg.ts` exists in this shape specifically because "the adapter cannot tell from a
+  // connection string, so it asks". See DEFECTS_FOUND.md §20.
+
+  const pg = (sharedAcrossHosts: boolean): AsyncReceiptLedger =>
+    postgresAsyncLedger({
+      query: fakePg(new Map()),
+      sharedAcrossHosts,
+      staleAfterMs: 1_000,
+      newReservationId: () => "res-fixed",
+    });
+
+  it("a ledger told it is not shared across hosts does not claim it is", () => {
+    expect(
+      pg(false).guarantees.crossHostSafe,
+      "the adapter claimed cross-host safety for a database nobody said was shared",
+    ).toBe(false);
+  });
+
+  it("...and a deployment that requires it is refused rather than reassured", () => {
+    expect(() =>
+      createAsyncGuard({
+        ledger: pg(false),
+        clock: () => 0,
+        requireGuarantees: { crossHostSafe: true },
+      }),
+    ).toThrow();
+  });
+
+  it("a ledger that IS shared claims it, so the check is not vacuously strict", () => {
+    // The near-miss. A guard that refused both would pass the two tests above and make the adapter
+    // unusable.
+    expect(pg(true).guarantees.crossHostSafe).toBe(true);
+    expect(() =>
+      createAsyncGuard({
+        ledger: pg(true),
+        clock: () => 0,
+        requireGuarantees: { crossHostSafe: true },
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe("a throw between reserve and decide unwinds rather than strands", () => {
+  // MUTATION L02: drop the `await ledger.release(reservation)` in the catch, async.ts.
+  //
+  // The two-phase protocol reserves BEFORE deciding. If the engine throws - a malformed context, a
+  // policy that does not typecheck at run time - the reservation is already in the store, and
+  // without the unwind it stays there: a receipt nobody can spend and nobody will finish. `stranded`
+  // exists to make that visible; this makes it not happen.
+
+  const id3 = (x: string) => x as unknown as ReceiptId;
+
+  it("the reservation is released, not left reserved", async () => {
+    // THE THROW IS SYNTHETIC, AND DELIBERATELY SO. The property is "ANY throw out of the engine
+    // unwinds the reservation", so where the throw comes from is irrelevant - what matters is that
+    // the reserve already happened when it arrives. A getter that throws is the smallest way to put
+    // the engine in that state without depending on some particular input being malformed today.
+    const shared = new Map();
+    const ledger = memoryAsyncLedger(shared, { staleAfterMs: null });
+    const guard = createAsyncGuard({ ledger, clock: () => 0 });
+
+    const receipt = {
+      id: id3("r-throw"),
+      rule: "user_confirmed_value",
+      capability: "email_send",
+      role: "sink_identity",
+      argName: "to",
+      lifts: "UNTRUSTED_EXTERNAL",
+      admitted: "x",
+      scope: { nonce: "n", issuedAt: 0, expiresAt: null, source: null },
+    };
+    const action = {
+      id: "a1",
+      tool: "t",
+      args: [{ name: "to", role: "sink_identity", derivedFrom: [], value: "x" }],
+      get capability(): string {
+        throw new Error("engine blew up after the reservation was taken");
+      },
+    };
+
+    await expect(
+      guard.decide({ action, sources: [], receipts: [receipt] } as never),
+    ).rejects.toThrow("engine blew up");
+
+    const after = await ledger.stats(100);
+    expect(
+      after.reserved,
+      "a throw left a reservation behind - the receipt is stranded and nobody can finish it",
+    ).toBe(0);
+    expect(after.stranded, "the stranded receipt is not even visible").toBe(0);
+  });
+});
+
+describe("the Postgres adapter counts stranded reservations with a real cutoff", () => {
+  // MUTATION A11: the stale cutoff passed to `stats` replaced with NEGATIVE_INFINITY, so nothing is
+  // ever older than it and `stranded` is permanently 0.
+  //
+  // It cannot produce an ALLOW - `stats` is observability, not a gate - which is exactly why it sat
+  // untested. But `async.ts` says stranded exists "so it is a number an operator can watch rather
+  // than a paragraph in a doc", and a number that is always 0 is a paragraph in a doc with extra
+  // steps. The in-memory adapter's equivalent was tested; the Postgres one was not, because the fake
+  // did not implement the query at all. See DEFECTS_FOUND.md §21.
+
+  const id4 = (x: string) => x as unknown as ReceiptId;
+
+  it("a reservation past the cutoff is stranded; a fresh one is not", async () => {
+    const rows = new Map();
+    const l = postgresAsyncLedger({
+      query: fakePg(rows),
+      sharedAcrossHosts: true,
+      staleAfterMs: 1_000,
+      newReservationId: () => "res-1",
+    });
+    await l.reserve([id4("r-abandoned")], "will-crash", 0);
+
+    expect((await l.stats(500)).stranded, "nothing is stale 500ms in").toBe(0);
+    expect(
+      (await l.stats(5_000)).stranded,
+      "a reservation abandoned 5s ago is not being counted as stranded",
+    ).toBe(1);
+  });
+
+  it("a consumed receipt is never counted as stranded, however old", async () => {
+    // The near-miss. A cutoff that ignored `state` would report every old row as stranded, which
+    // would make the number useless in the other direction.
+    const rows = new Map();
+    const l = postgresAsyncLedger({
+      query: fakePg(rows),
+      sharedAcrossHosts: true,
+      staleAfterMs: 1_000,
+      newReservationId: () => "res-2",
+    });
+    const r = await l.reserve([id4("r-done")], "finished", 0);
+    await l.consume(r, 0);
+
+    const later = await l.stats(9_999);
+    expect(later.stranded, "a CONSUMED receipt was counted as stranded").toBe(0);
+    expect(later.consumed).toBe(1);
+  });
+});
+
+describe("a receipt-free action does not touch the ledger", () => {
+  // MUTATION L13: the `wanted.length === 0` short-circuit removed, so every action - including the
+  // overwhelming majority that carry no receipts - makes a reserve round-trip.
+  //
+  // It cannot produce an ALLOW either: reserving nothing returns nothing and the verdict is
+  // unchanged. What it costs is a network round-trip per decision against a shared database, which
+  // on the async path is the difference between a guard you can put in a hot path and one you cannot.
+  // Asserted by counting calls rather than by timing, so it cannot flake.
+
+  it("reserve is not called when the action carries no receipts", async () => {
+    const shared = new Map();
+    const inner = memoryAsyncLedger(shared, { staleAfterMs: null });
+    let reserveCalls = 0;
+    const counting: AsyncReceiptLedger = {
+      ...inner,
+      reserve: async (...args) => {
+        reserveCalls += 1;
+        return inner.reserve(...args);
+      },
+    };
+    const guard = createAsyncGuard({ ledger: counting, clock: () => 0 });
+
+    await guard.decide({
+      action: {
+        id: "a1" as never,
+        capability: "text_response",
+        tool: "t",
+        args: [{ name: "body", role: "payload", derivedFrom: [], value: "hello" }],
+      },
+      sources: [],
+      receipts: [],
+    } as never);
+
+    expect(
+      reserveCalls,
+      "a receipt-free action made a ledger round-trip - one network hop per decision, for nothing",
+    ).toBe(0);
+  });
+
+  it("...and reserve IS called when the action carries one", async () => {
+    // The near-miss: a short-circuit that fired on every action would skip replay protection.
+    const shared = new Map();
+    const inner = memoryAsyncLedger(shared, { staleAfterMs: null });
+    let reserveCalls = 0;
+    const counting: AsyncReceiptLedger = {
+      ...inner,
+      reserve: async (...args) => {
+        reserveCalls += 1;
+        return inner.reserve(...args);
+      },
+    };
+    const guard = createAsyncGuard({ ledger: counting, clock: () => 0 });
+
+    await guard.decide({
+      action: {
+        id: "a2" as never,
+        capability: "text_response",
+        tool: "t",
+        args: [{ name: "body", role: "payload", derivedFrom: [], value: "hello" }],
+      },
+      sources: [],
+      receipts: [
+        {
+          id: "r-1",
+          rule: "user_confirmed_value",
+          capability: "text_response",
+          role: "payload",
+          argName: "body",
+          lifts: "UNTRUSTED_EXTERNAL",
+          admitted: "hello",
+          scope: { nonce: "n", issuedAt: 0, expiresAt: null, source: null },
+        },
+      ],
+    } as never);
+
+    expect(
+      reserveCalls,
+      "an action WITH a receipt skipped the ledger - replay protection is gone",
+    ).toBe(1);
   });
 });

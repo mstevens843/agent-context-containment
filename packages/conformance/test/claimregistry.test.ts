@@ -13,6 +13,9 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const REPO = join(import.meta.dirname, "..", "..", "..");
+const scripts: Record<string, string> = JSON.parse(
+  readFileSync(join(REPO, "package.json"), "utf8"),
+).scripts;
 
 interface Claim {
   readonly id: string;
@@ -69,10 +72,39 @@ describe("claim registry", () => {
     // THE §15 RULE. A test that passes proves nothing until something has been seen to make it fail.
     for (const c of registry.claims) {
       if (!NEEDS_EVIDENCE.has(c.grade)) continue;
+      const nc = c.negativeControl ?? "";
       expect(
-        (c.negativeControl ?? "").length > 20,
+        nc.length > 20,
         `${c.id} is ${c.grade} with no negative control - this is the §15 shape: a test that passes and may not be able to fail`,
       ).toBe(true);
+      // AND IT MUST NAME SOMETHING THAT EXISTS. Until v1.0 this rule checked the string's LENGTH and
+      // nothing else, so an adversarial reviewer replaced the purity claim's control - the most
+      // fundamental claim in the project - with 76 characters of nonsense and `audit:claims` still
+      // reported 25/25. A control that cannot be resolved to an artifact is prose. See §19.
+      const anchors = [
+        ...nc.matchAll(/\b((?:packages|scripts|corpus|docs|examples)\/[\w./-]+)/g),
+      ].map((m) => m[1] ?? "");
+      const commands = [...nc.matchAll(/\b((?:pnpm|npx)\s+[\w:-]+)/g)].map((m) => m[1] ?? "");
+      const cites = c.mutation !== undefined || anchors.length > 0 || commands.length > 0;
+      expect(
+        cites,
+        `${c.id}'s negative control names no artifact - no mutation, no path, no command. ` +
+          `A reviewer cannot check it and neither can this test: "${nc.slice(0, 60)}"`,
+      ).toBe(true);
+      for (const a of anchors) {
+        expect(
+          existsSync(join(REPO, a)),
+          `${c.id}'s negative control cites ${a}, which does not exist`,
+        ).toBe(true);
+      }
+      for (const cmd of commands) {
+        const script = cmd.replace(/^(?:pnpm|npx)\s+/, "");
+        if (script === "vitest" || script === "test") continue;
+        expect(
+          Object.hasOwn(scripts, script),
+          `${c.id}'s negative control cites \`${cmd}\`, which is not a package script`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -135,6 +167,57 @@ describe("claim registry", () => {
         `${c.id} is ${c.grade} and carries a negative control - it is asserting something after all`,
       ).toBeUndefined();
     }
+  });
+
+  it("every gate the registry leans on actually runs in CI", () => {
+    // §17 found the control for the whole mutant apparatus sitting outside CI. v1.0 found the same
+    // thing one level up: NONE of audit:docs, blocks:check, verify:numbers, audit:claims or
+    // audit:mutations ran in CI, so the repository shipped with `audit:docs` exiting 1 and a README
+    // number seven tests stale while every checkmark was green.
+    //
+    // A gate that does not run is a gate that does not exist, and the failure is silent by
+    // construction - which is the one failure mode this project keeps rediscovering. So the workflow
+    // file is an asserted artifact now: delete a step and this fails. See DEFECTS_FOUND.md §19.
+    const ci = readFileSync(join(REPO, ".github", "workflows", "ci.yml"), "utf8");
+    for (const gate of [
+      "pnpm blocks:check",
+      "pnpm verify:numbers",
+      "pnpm audit:docs",
+      "pnpm audit:claims",
+      "pnpm audit:mutations",
+      "pnpm audit:release",
+    ]) {
+      expect(
+        ci.includes(gate),
+        `CI does not run \`${gate}\`. Every claim it defends is unguarded on every push.`,
+      ).toBe(true);
+    }
+    // verify:freeze is deliberately NOT a gate: it exits 1 by design and would make CI permanently
+    // red for a limitation the project reports rather than a defect. Pinned so that "it is not in
+    // CI" stays a recorded decision instead of becoming an oversight somebody quietly corrects.
+    expect(
+      ci.includes("pnpm verify:freeze"),
+      "verify:freeze is a gate now - it exits 1 by design, so CI can never be green again",
+    ).toBe(false);
+
+    // The frozen holdout is gated too, in its own job and without a toolchain, so a drifted corpus
+    // fails in seconds with a red X that says "the corpus drifted" rather than "the build broke".
+    expect(
+      ci.includes("corpus/holdout/MANIFEST.sha256"),
+      "CI no longer verifies the frozen holdout against its manifest",
+    ).toBe(true);
+
+    // POSTGRES MUST STAY OUT, and the reason must stay written down. Without DATABASE_URL the proof
+    // reports SKIPPED / NOT PROVEN and exits 0 - a green step that proved nothing. Adding it would
+    // convert an honest skip into a rubber stamp, which is the shape of half of DEFECTS_FOUND.md.
+    expect(
+      ci.includes("pnpm prove:postgres"),
+      "CI runs prove:postgres, which without DATABASE_URL is a green step that proves nothing",
+    ).toBe(false);
+    expect(
+      ci.includes("DATABASE_URL"),
+      "the reason Postgres is absent from CI is no longer recorded in the workflow",
+    ).toBe(true);
   });
 
   it("the claims that most need defending are the ones that have it", () => {

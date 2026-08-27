@@ -9,8 +9,8 @@
 // Note the retrieval step: the chunk carries its provenance through ranking and into the policy
 // check, which is the actual job of the retrieval package.
 
-import { actionId, decide, sourceId } from "@agent-containment/core";
-import { buildIndex } from "@agent-containment/retrieval";
+import { actionId, decide, sourceId } from "@agent-context-containment/core";
+import { buildIndex } from "@agent-context-containment/retrieval";
 
 const index = buildIndex([
   {

@@ -23,7 +23,7 @@ import {
   type Source,
   type Verdict,
   decide,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 
 // ---------------------------------------------------------------------------------------------
 // The ledger

@@ -17,7 +17,7 @@ import {
   admitConfirmedTuple,
   admitNumericEnvelope,
   sourceId,
-} from "@agent-containment/core";
+} from "@agent-context-containment/core";
 import { type Demo, runDemo } from "./harness.js";
 
 const TICKET = `Order #88213 arrived damaged, I would like a refund.

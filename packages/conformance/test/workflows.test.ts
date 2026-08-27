@@ -14,7 +14,7 @@ import {
   type WorkflowResult,
   formatWorkflows,
   runWorkflow,
-} from "@agent-containment/conformance";
+} from "@agent-context-containment/conformance";
 import { describe, expect, it } from "vitest";
 
 const results: WorkflowResult[] = REVIEW_WORKFLOWS.map(runWorkflow);
